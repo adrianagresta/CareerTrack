@@ -1,58 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Plus, 
-  Search, 
   Briefcase, 
-  MapPin, 
-  Calendar, 
-  ExternalLink, 
   Trash2, 
-  Edit2, 
-  CheckCircle2, 
-  Clock, 
-  XCircle, 
-  Sparkles,
-  Loader2,
-  DollarSign,
-  FileText,
-  Upload,
   RefreshCw,
   Wifi,
   WifiOff,
   AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { JobApplication, ApplicationStatus, NewApplication } from './types';
+import { JobApplication, NewApplication, NewInterview, Interview } from './types';
 import * as db from './db';
 import * as sync from './syncService';
 
-const STATUS_COLORS: Record<ApplicationStatus, string> = {
-  'Wishlist': 'bg-slate-100 text-slate-600 border-slate-200',
-  'Applied': 'bg-blue-50 text-blue-600 border-blue-100',
-  'Interviewing': 'bg-amber-50 text-amber-600 border-amber-100',
-  'Offer': 'bg-emerald-50 text-emerald-600 border-emerald-100',
-  'Rejected': 'bg-rose-50 text-rose-600 border-rose-100',
-  'Withdrawn': 'bg-slate-50 text-slate-500 border-slate-200',
-};
-
-const STATUS_ICONS: Record<ApplicationStatus, React.ReactNode> = {
-  'Wishlist': <Clock className="w-4 h-4" />,
-  'Applied': <CheckCircle2 className="w-4 h-4" />,
-  'Interviewing': <Clock className="w-4 h-4" />,
-  'Offer': <Sparkles className="w-4 h-4" />,
-  'Rejected': <XCircle className="w-4 h-4" />,
-  'Withdrawn': <XCircle className="w-4 h-4" />,
-};
+import { MainView } from './components/MainView';
+import { ApplicationForm } from './components/ApplicationForm';
+import { InterviewForm } from './components/InterviewForm';
 
 export default function App() {
+  const [view, setView] = useState<'main' | 'form' | 'interview'>('main');
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingApp, setEditingApp] = useState<JobApplication | null>(null);
+  const [editingInterview, setEditingInterview] = useState<Interview | null>(null);
 
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteInterviewId, setDeleteInterviewId] = useState<string | null>(null);
   const [syncState, setSyncState] = useState<sync.SyncState>({
     status: 'idle',
     lastSyncTime: null,
@@ -66,16 +40,29 @@ export default function App() {
     applied_date: new Date().toISOString().split('T')[0],
     url: '',
     location: '',
+    location_type: 'OnSite',
     salary: '',
+    salary_min: undefined,
+    salary_max: undefined,
+    desired_salary_min: undefined,
+    desired_salary_max: undefined,
     notes: '',
     pdf_data: ''
+  });
+
+  const [interviewData, setInterviewData] = useState<NewInterview>({
+    application_id: '',
+    date: new Date().toISOString().split('T')[0],
+    time: '09:00',
+    type: 'Phone Screen',
+    duration: 30,
+    notes: ''
   });
 
   useEffect(() => {
     fetchApplications();
     const unsubscribe = sync.subscribeToSync((state) => {
       setSyncState(state);
-      // Refresh data when sync succeeds
       if (state.status === 'success') {
         fetchApplications();
       }
@@ -102,26 +89,81 @@ export default function App() {
         id: editingApp?.id
       });
       
-      fetchApplications();
-      setIsModalOpen(false);
+      await fetchApplications();
+      setView('main');
       setEditingApp(null);
-      setFormData({
-        company: '',
-        position: '',
-        status: 'Applied',
-        applied_date: new Date().toISOString().split('T')[0],
-        url: '',
-        location: '',
-        salary: '',
-        notes: '',
-        pdf_data: ''
-      });
-      
-      // Trigger background sync
+      resetForm();
       sync.performSync();
     } catch (error) {
       console.error('Failed to save application:', error);
     }
+  };
+
+  const handleInterviewSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      // Check if this is the first interview for this application
+      const isFirstInterview = !editingInterview && (!editingApp?.interviews || editingApp.interviews.length === 0);
+      
+      await db.saveInterview({
+        ...interviewData,
+        id: editingInterview?.id
+      });
+      
+      // Auto-update status to Interviewing if it's the first interview
+      if (isFirstInterview && editingApp) {
+        await db.saveApplication({
+          ...editingApp,
+          status: 'Interviewing'
+        });
+        setFormData(prev => ({ ...prev, status: 'Interviewing' }));
+      }
+      
+      await fetchApplications();
+      
+      // Update editingApp if we are editing
+      if (editingApp) {
+        const updated = await db.getApplications();
+        const freshApp = updated.find(a => a.id === editingApp.id);
+        if (freshApp) setEditingApp(freshApp);
+      }
+      
+      setView('form');
+      setEditingInterview(null);
+      sync.performSync();
+    } catch (error) {
+      console.error('Failed to save interview:', error);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      company: '',
+      position: '',
+      status: 'Applied',
+      applied_date: new Date().toISOString().split('T')[0],
+      url: '',
+      location: '',
+      location_type: 'OnSite',
+      salary: '',
+      salary_min: undefined,
+      salary_max: undefined,
+      desired_salary_min: undefined,
+      desired_salary_max: undefined,
+      notes: '',
+      pdf_data: ''
+    });
+  };
+
+  const resetInterviewForm = (applicationId: string) => {
+    setInterviewData({
+      application_id: applicationId,
+      date: new Date().toISOString().split('T')[0],
+      time: '09:00',
+      type: 'Phone Screen',
+      duration: 30,
+      notes: ''
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -129,10 +171,27 @@ export default function App() {
       await db.deleteApplication(id);
       fetchApplications();
       setDeleteConfirmId(null);
-      // Trigger background sync
       sync.performSync();
     } catch (error) {
       console.error('Failed to delete application:', error);
+    }
+  };
+
+  const handleDeleteInterview = async (id: string) => {
+    try {
+      await db.deleteInterview(id);
+      await fetchApplications();
+      
+      if (editingApp) {
+        const updated = await db.getApplications();
+        const freshApp = updated.find(a => a.id === editingApp.id);
+        if (freshApp) setEditingApp(freshApp);
+      }
+      
+      setDeleteInterviewId(null);
+      sync.performSync();
+    } catch (error) {
+      console.error('Failed to delete interview:', error);
     }
   };
 
@@ -145,16 +204,42 @@ export default function App() {
       applied_date: app.applied_date,
       url: app.url,
       location: app.location,
+      location_type: app.location_type || 'OnSite',
       salary: app.salary,
+      salary_min: app.salary_min,
+      salary_max: app.salary_max,
+      desired_salary_min: app.desired_salary_min,
+      desired_salary_max: app.desired_salary_max,
       notes: app.notes,
       pdf_data: app.pdf_data
     });
-    setIsModalOpen(true);
+    setView('form');
+  };
+
+  const handleAddInterview = (applicationId: string) => {
+    resetInterviewForm(applicationId);
+    setEditingInterview(null);
+    setView('interview');
+  };
+
+  const handleEditInterview = (interview: Interview) => {
+    setEditingInterview(interview);
+    setInterviewData({
+      application_id: interview.application_id,
+      date: interview.date,
+      time: interview.time,
+      type: interview.type,
+      duration: interview.duration,
+      notes: interview.notes
+    });
+    setView('interview');
   };
 
   const filteredApps = applications.filter(app => {
-    const matchesSearch = app.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         app.position.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = 
+      app.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      app.position.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (app.location && app.location.toLowerCase().includes(searchQuery.toLowerCase()));
     
     if (!activeFilter || activeFilter === 'Total') return matchesSearch;
     
@@ -173,25 +258,6 @@ export default function App() {
     closed: applications.filter(a => a.status === 'Rejected' || a.status === 'Withdrawn').length,
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.type !== 'application/pdf') {
-        alert('Please upload a PDF file');
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        alert('File size must be less than 5MB');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({ ...formData, pdf_data: reader.result as string });
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const viewPdf = (pdfData: string) => {
     const newWindow = window.open();
     if (newWindow) {
@@ -200,448 +266,186 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-slate-900 font-sans">
+    <div className="min-h-screen bg-[#F8F9FA] text-slate-900 font-sans flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-[40]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-                <Briefcase className="text-white w-5 h-5" />
-              </div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-800">CareerTrack</h1>
-            </div>
+          <div className="flex justify-between items-center h-20">
             <button 
-              onClick={() => { setEditingApp(null); setIsModalOpen(true); }}
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-all shadow-sm font-medium"
+              onClick={() => setView('main')}
+              className="flex items-center gap-3 transition-transform active:scale-95 group"
             >
-              <Plus className="w-4 h-4" />
-              <span>Add Application</span>
+              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100 group-hover:rotate-3 transition-transform">
+                <Briefcase className="text-white w-6 h-6" />
+              </div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">CareerTrack</h1>
             </button>
+            <div className="flex items-center gap-4">
+              {view === 'main' && (
+                <span className="hidden sm:inline-flex items-center px-3 py-1 bg-slate-100 rounded-lg text-xs font-bold text-slate-500">
+                  {stats.total} OPPORTUNITIES
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-          {[
-            { label: 'Total', value: stats.total, color: 'text-indigo-600', filter: 'Total' },
-            { label: 'Applied', value: stats.applied, color: 'text-blue-600', filter: 'Applied' },
-            { label: 'Interviewing', value: stats.interviewing, color: 'text-amber-600', filter: 'Interviewing' },
-            { label: 'Offers', value: stats.offers, color: 'text-emerald-600', filter: 'Offer' },
-            { label: 'Closed', value: stats.closed, color: 'text-slate-600', filter: 'Closed' },
-          ].map((stat, i) => (
-            <motion.button 
-              key={stat.label}
-              onClick={() => setActiveFilter(activeFilter === stat.filter ? null : stat.filter)}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className={`bg-white p-4 rounded-2xl border transition-all text-left group ${
-                activeFilter === stat.filter 
-                  ? 'border-indigo-500 ring-2 ring-indigo-500/10 shadow-md' 
-                  : 'border-slate-200 shadow-sm hover:border-indigo-300 hover:shadow-md'
-              }`}
+      <main className="flex-1">
+        <AnimatePresence mode="wait">
+          {view === 'main' ? (
+            <motion.div
+              key="main"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.2 }}
             >
-              <p className="text-sm font-medium text-slate-500 mb-1 group-hover:text-slate-700 transition-colors">{stat.label}</p>
-              <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-            </motion.button>
-          ))}
-        </div>
-
-        {/* Search & Filter */}
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-            <input 
-              type="text" 
-              placeholder="Search by company or position..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-            />
-          </div>
-        </div>
-
-        {/* Job List */}
-        <div className="space-y-4">
-          {loading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-            </div>
-          ) : filteredApps.length === 0 ? (
-            <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Briefcase className="text-slate-300 w-8 h-8" />
-              </div>
-              <h3 className="text-lg font-medium text-slate-900">No applications found</h3>
-              <p className="text-slate-500">Start your journey by adding your first job application.</p>
-            </div>
+              <MainView 
+                stats={stats}
+                activeFilter={activeFilter}
+                setActiveFilter={setActiveFilter}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                loading={loading}
+                apps={filteredApps}
+                onEdit={handleEdit}
+                onDelete={setDeleteConfirmId}
+                onAdd={() => { setEditingApp(null); resetForm(); setView('form'); }}
+                viewPdf={viewPdf}
+              />
+            </motion.div>
+          ) : view === 'form' ? (
+            <motion.div
+              key="form"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+              className="py-12 px-4"
+            >
+              <ApplicationForm 
+                formData={formData}
+                setFormData={setFormData}
+                onSubmit={handleSubmit}
+                onCancel={() => { setView('main'); setEditingApp(null); }}
+                editingApp={editingApp}
+                onAddInterview={handleAddInterview}
+                onEditInterview={handleEditInterview}
+                onDeleteInterview={setDeleteInterviewId}
+              />
+            </motion.div>
           ) : (
-            <AnimatePresence mode="popLayout">
-              {filteredApps.map((app) => (
-                <motion.div
-                  key={app.id}
-                  layout
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-shadow group relative"
-                >
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shrink-0">
-                        <span className="text-xl font-bold text-indigo-600">{app.company[0]}</span>
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-slate-900 text-lg leading-tight">{app.position}</h3>
-                        <p className="text-slate-600 font-medium">{app.company}</p>
-                        <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-slate-500">
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5" />
-                            {app.location || 'Remote'}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5" />
-                            {app.applied_date}
-                          </span>
-                          {app.salary && (
-                            <span className="flex items-center gap-1">
-                              <DollarSign className="w-3.5 h-3.5" />
-                              {app.salary}
-                            </span>
-                          )}
-                          {app.pdf_data && (
-                            <button 
-                              onClick={() => viewPdf(app.pdf_data!)}
-                              className="flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-medium"
-                            >
-                              <FileText className="w-3.5 h-3.5" />
-                              View Ad PDF
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${STATUS_COLORS[app.status]}`}>
-                        {STATUS_ICONS[app.status]}
-                        {app.status}
-                      </span>
-                      
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <div className="relative group/tooltip">
-                          <button 
-                            onClick={() => handleEdit(app)}
-                            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-30">
-                            Edit
-                          </div>
-                        </div>
-
-                        <div className="relative group/tooltip">
-                          <button 
-                            onClick={() => setDeleteConfirmId(app.id)}
-                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-30">
-                            Delete
-                          </div>
-                        </div>
-
-                        {app.url && (
-                          <div className="relative group/tooltip">
-                            <a 
-                              href={app.url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </a>
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-30">
-                              View Job
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+            <motion.div
+              key="interview"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="py-12 px-4"
+            >
+              <InterviewForm 
+                formData={interviewData}
+                setFormData={setInterviewData}
+                onSubmit={handleInterviewSubmit}
+                onCancel={() => setView('form')}
+                editingInterview={editingInterview}
+                companyName={editingApp?.company || 'Unknown Company'}
+              />
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
       </main>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Overlay */}
       <AnimatePresence>
-        {deleteConfirmId && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        {(deleteConfirmId || deleteInterviewId) && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setDeleteConfirmId(null)}
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+              onClick={() => { setDeleteConfirmId(null); setDeleteInterviewId(null); }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden p-8"
+              className="relative bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden p-10"
             >
               <div className="text-center">
-                <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Trash2 className="text-rose-600 w-8 h-8" />
+                <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Trash2 className="text-rose-600 w-10 h-10" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-2">Delete Application?</h3>
-                <p className="text-slate-500 mb-8">
-                  This action cannot be undone. This application will be permanently removed from your database.
+                <h3 className="text-2xl font-bold text-slate-900 mb-3">
+                  {deleteInterviewId ? 'Delete Interview?' : 'Remove Application?'}
+                </h3>
+                <p className="text-slate-500 mb-10 text-lg">
+                  {deleteInterviewId 
+                    ? 'This will permanently remove this interview from your records.'
+                    : 'This will permanently delete this opportunity from your tracker. This action cannot be reversed.'}
                 </p>
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                   <button 
-                    onClick={() => setDeleteConfirmId(null)}
-                    className="flex-1 px-6 py-3 text-slate-600 font-semibold hover:bg-slate-50 rounded-xl transition-colors"
+                    onClick={() => { setDeleteConfirmId(null); setDeleteInterviewId(null); }}
+                    className="flex-1 px-8 py-4 text-slate-600 font-bold hover:bg-slate-50 rounded-2xl transition-colors"
                   >
                     Cancel
                   </button>
                   <button 
-                    onClick={() => handleDelete(deleteConfirmId)}
-                    className="flex-1 px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl shadow-md shadow-rose-200 transition-all"
+                    onClick={() => deleteInterviewId ? handleDeleteInterview(deleteInterviewId) : handleDelete(deleteConfirmId!)}
+                    className="flex-1 px-8 py-4 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-2xl shadow-xl shadow-rose-200 transition-all active:scale-95"
                   >
-                    Delete
+                    Yes, Delete
                   </button>
                 </div>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Modal */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsModalOpen(false)}
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden"
-            >
-              <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-slate-900">
-                  {editingApp ? 'Edit Application' : 'New Application'}
-                </h2>
-                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                  <XCircle className="w-6 h-6" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmit} className="p-8 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Company Name *</label>
-                    <input 
-                      required
-                      type="text" 
-                      value={formData.company}
-                      onChange={e => setFormData({...formData, company: e.target.value})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                      placeholder="e.g. Google"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Position *</label>
-                    <input 
-                      required
-                      type="text" 
-                      value={formData.position}
-                      onChange={e => setFormData({...formData, position: e.target.value})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                      placeholder="e.g. Senior Frontend Engineer"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Status</label>
-                    <select 
-                      value={formData.status}
-                      onChange={e => setFormData({...formData, status: e.target.value as ApplicationStatus})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                    >
-                      <option value="Wishlist">Wishlist</option>
-                      <option value="Applied">Applied</option>
-                      <option value="Interviewing">Interviewing</option>
-                      <option value="Offer">Offer</option>
-                      <option value="Rejected">Rejected</option>
-                      <option value="Withdrawn">Withdrawn</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Applied Date</label>
-                    <input 
-                      type="date" 
-                      value={formData.applied_date}
-                      onChange={e => setFormData({...formData, applied_date: e.target.value})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Location</label>
-                    <input 
-                      type="text" 
-                      value={formData.location}
-                      onChange={e => setFormData({...formData, location: e.target.value})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                      placeholder="e.g. New York, NY or Remote"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Salary Range</label>
-                    <input 
-                      type="text" 
-                      value={formData.salary}
-                      onChange={e => setFormData({...formData, salary: e.target.value})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                      placeholder="e.g. $120k - $150k"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">Job URL</label>
-                  <input 
-                    type="url" 
-                    value={formData.url}
-                    onChange={e => setFormData({...formData, url: e.target.value})}
-                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                    placeholder="https://company.com/careers/job-123"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">Job Advertisement PDF</label>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
-                      <Upload className="w-4 h-4 text-slate-500" />
-                      <span className="text-sm text-slate-600">
-                        {formData.pdf_data ? 'Change PDF' : 'Upload PDF'}
-                      </span>
-                      <input 
-                        type="file" 
-                        accept=".pdf"
-                        onChange={handleFileChange}
-                        className="hidden"
-                      />
-                    </label>
-                    {formData.pdf_data && (
-                      <div className="flex items-center gap-2 text-emerald-600 text-sm font-medium">
-                        <CheckCircle2 className="w-4 h-4" />
-                        PDF Attached
-                        <button 
-                          type="button"
-                          onClick={() => setFormData({ ...formData, pdf_data: '' })}
-                          className="text-rose-500 hover:text-rose-600 ml-2"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">Notes</label>
-                  <textarea 
-                    rows={3}
-                    value={formData.notes}
-                    onChange={e => setFormData({...formData, notes: e.target.value})}
-                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all resize-none"
-                    placeholder="Add any details about the role, interview process, etc."
-                  />
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4">
-                  <button 
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="px-6 py-2.5 text-slate-600 font-semibold hover:bg-slate-50 rounded-xl transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="submit"
-                    className="px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-md shadow-indigo-200 transition-all"
-                  >
-                    {editingApp ? 'Save Changes' : 'Create Application'}
-                  </button>
-                </div>
-              </form>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
       {/* Status Bar */}
-      <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 h-10 z-50 flex items-center px-4 text-xs font-medium text-slate-500">
+      <footer className="bg-white border-t border-slate-200 h-12 shrink-0 flex items-center px-6 text-xs font-bold text-slate-400 uppercase tracking-widest z-[40]">
         <div className="max-w-7xl mx-auto w-full flex justify-between items-center">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
             <button 
               onClick={() => sync.manualSync()}
               disabled={syncState.status === 'syncing'}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-100 transition-colors ${
-                syncState.status === 'syncing' ? 'text-indigo-600' : ''
-              }`}
+              className={`flex items-center gap-2 group ${
+                syncState.status === 'syncing' ? 'text-indigo-600' : 'hover:text-indigo-600'
+              } transition-colors`}
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${syncState.status === 'syncing' ? 'animate-spin' : ''}`} />
-              <span>{syncState.status === 'syncing' ? 'Syncing...' : 'Sync Now'}</span>
+              <RefreshCw className={`w-4 h-4 ${syncState.status === 'syncing' ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+              <span>{syncState.status === 'syncing' ? 'Syncing...' : 'Sync Data'}</span>
             </button>
             {syncState.lastSyncTime && (
-              <span className="text-slate-400">
-                Last synced: {new Date(syncState.lastSyncTime).toLocaleTimeString()}
+              <span className="hidden sm:inline border-l border-slate-200 pl-6">
+                Updated: {new Date(syncState.lastSyncTime).toLocaleTimeString()}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
               {syncState.status === 'offline' ? (
-                <div className="flex items-center gap-1.5 text-rose-500">
-                  <WifiOff className="w-3.5 h-3.5" />
-                  <span>Offline Mode</span>
+                <div className="flex items-center gap-2 text-rose-500">
+                  <WifiOff className="w-4 h-4" />
+                  <span>Offline</span>
                 </div>
               ) : syncState.status === 'error' ? (
-                <div className="flex items-center gap-1.5 text-amber-500">
-                  <AlertCircle className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-2 text-amber-500">
+                  <AlertCircle className="w-4 h-4" />
                   <span>Sync Error</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-1.5 text-emerald-500">
-                  <Wifi className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-2 text-emerald-500">
+                  <Wifi className="w-4 h-4" />
                   <span>Connected</span>
                 </div>
               )}
             </div>
-            <div className={`w-2 h-2 rounded-full ${
-              syncState.status === 'syncing' ? 'bg-indigo-500 animate-pulse' :
-              syncState.status === 'offline' ? 'bg-rose-500' :
-              syncState.status === 'error' ? 'bg-amber-500' :
-              'bg-emerald-500'
-            }`} />
           </div>
         </div>
       </footer>

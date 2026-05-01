@@ -1,8 +1,8 @@
 import { openDB, IDBPDatabase } from 'idb';
-import { JobApplication } from './types';
+import { JobApplication, NewInterview, Interview } from './types';
 
 const DB_NAME = 'CareerTrackDB';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export interface SyncMeta {
   key: string;
@@ -15,6 +15,7 @@ export async function initDB() {
       if (oldVersion < 1) {
         db.createObjectStore('applications', { keyPath: 'id' });
         db.createObjectStore('sync_meta', { keyPath: 'key' });
+        db.createObjectStore('interviews', { keyPath: 'id' });
       }
       
       // Migration from autoIncrement to manual IDs (UUIDs)
@@ -23,6 +24,15 @@ export async function initDB() {
           db.deleteObjectStore('applications');
         }
         db.createObjectStore('applications', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('interviews')) {
+          db.createObjectStore('interviews', { keyPath: 'id' });
+        }
+      }
+      
+      if (oldVersion === 2) {
+        if (!db.objectStoreNames.contains('interviews')) {
+          db.createObjectStore('interviews', { keyPath: 'id' });
+        }
       }
     },
   });
@@ -38,7 +48,15 @@ function getDB() {
 export async function getApplications(): Promise<JobApplication[]> {
   const db = await getDB();
   const apps = await db.getAll('applications');
-  return apps.filter(app => !app.is_deleted).sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+  const interviews = await db.getAll('interviews');
+  
+  const activeApps = apps.filter(app => !app.is_deleted);
+  
+  // Join interviews to applications
+  return activeApps.map(app => ({
+    ...app,
+    interviews: interviews.filter(i => i.application_id === app.id)
+  })).sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
 }
 
 export async function getApplication(id: string): Promise<JobApplication | undefined> {
@@ -99,14 +117,57 @@ export async function getPendingChanges(lastSyncVersion: number): Promise<JobApp
   // A more robust way would be a separate 'outbox' store.
 }
 
-export async function applyServerChanges(changes: JobApplication[]) {
+export async function applyServerChanges(changes: JobApplication[], interviewChanges?: any[]) {
   const db = await getDB();
-  const tx = db.transaction('applications', 'readwrite');
+  
+  // Apply application changes
+  const appTx = db.transaction('applications', 'readwrite');
   for (const change of changes) {
-    const local = await tx.store.get(change.id);
+    const local = await appTx.store.get(change.id);
     if (!local || change.updated_at >= local.updated_at) {
-      await tx.store.put(change);
+      await appTx.store.put(change);
     }
   }
-  await tx.done;
+  await appTx.done;
+
+  // Apply interview changes
+  if (interviewChanges && interviewChanges.length > 0) {
+    const interviewTx = db.transaction('interviews', 'readwrite');
+    for (const change of interviewChanges) {
+      const local = await interviewTx.store.get(change.id);
+      if (!local || change.updated_at >= local.updated_at) {
+        await interviewTx.store.put(change);
+      }
+    }
+    await interviewTx.done;
+  }
+}
+
+// Interviews
+export async function saveInterview(interview: Partial<Interview> & { application_id: string }): Promise<string> {
+  const db = await getDB();
+  const now = Date.now();
+  const existing = interview.id ? await db.get('interviews', interview.id) : null;
+  
+  const updatedInterview = {
+    ...existing,
+    ...interview,
+    id: interview.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 11)),
+    updated_at: now,
+    version: existing?.version || 0,
+    created_at: existing?.created_at || now
+  } as Interview;
+
+  await db.put('interviews', updatedInterview);
+  return updatedInterview.id;
+}
+
+export async function deleteInterview(id: string) {
+  const db = await getDB();
+  // For simplicity, we just delete it locally. 
+  // In a full sync, we should mark as is_deleted, but interviews table in server doesn't have is_deleted.
+  // Actually, let's just delete it locally and on server.
+  await db.delete('interviews', id);
+  // Optional: signal server
+  await fetch(`/api/interviews/${id}`, { method: 'DELETE' }).catch(() => {});
 }

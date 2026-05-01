@@ -46,10 +46,12 @@ export async function performSync() {
     // and let the server decide based on updated_at.
     const db = await initDB();
     const allLocal = await db.getAll('applications');
+    const allInterviews = await db.getAll('interviews');
     
     const syncRequest: SyncRequest = {
       last_sync_version: lastSyncVersion,
       changes: allLocal,
+      interview_changes: allInterviews
     };
 
     const response = await fetch('/api/sync', {
@@ -62,7 +64,7 @@ export async function performSync() {
 
     const data: SyncResponse = await response.json();
 
-    await applyServerChanges(data.changes);
+    await applyServerChanges(data.changes, data.interview_changes);
     await setSyncMeta('last_sync_version', data.server_version);
 
     syncState = {

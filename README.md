@@ -1,20 +1,14 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Career Track
 
-# Run and deploy your AI Studio app
+## Intro
 
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/21c4e8ae-1bc1-40d3-bd53-20c89f6edf00
+CareerTrack was scaffolded in Google AI Studio, exported locally, developed further, and then pushed to GitHub when the idea of losing work to a crash was sufficiently frightening. The utility is very simple, consisting of a dashboard and 2 data entry screens and 3 database tables.
 
 ## Run Locally
+To start the app, run this. 
 
-**Prerequisites:**  Node.js
+```
+npm run dev
+```
 
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+*Note that the app is configured to run on 0.0.0.0. This is fine if run in a secure network but treat it as a security risk. To run only on localhost, change the `app.listen(...)` call in server.ts from "0.0.0.0" to "127.0.0.1".

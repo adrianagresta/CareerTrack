@@ -1,263 +1,213 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Briefcase, 
-  Trash2, 
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Briefcase,
+  Trash2,
   RefreshCw,
   Wifi,
   WifiOff,
   AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { JobApplication, NewApplication, NewInterview, Interview } from './types';
-import * as db from './db';
-import * as sync from './syncService';
+import { initDB } from './db';
+import { ApplicationService, InterviewService } from './services';
+import { getSyncManager, SyncState } from './syncManager';
+import { getViewStateManager } from './viewStateManager';
+import { getEventBus } from './eventBus';
+import { logError } from './errors';
+import { JobApplicationModel } from './models';
 
 import { MainView } from './components/MainView';
 import { ApplicationForm } from './components/ApplicationForm';
 import { InterviewForm } from './components/InterviewForm';
 
 export default function App() {
-  const [view, setView] = useState<'main' | 'form' | 'interview'>('main');
-  const [applications, setApplications] = useState<JobApplication[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [editingApp, setEditingApp] = useState<JobApplication | null>(null);
-  const [editingInterview, setEditingInterview] = useState<Interview | null>(null);
+  // Services and managers
+  const [appService, setAppService] = useState<ApplicationService | null>(null);
+  const [interviewService, setInterviewService] = useState<InterviewService | null>(null);
+  const syncManager = getSyncManager();
+  const viewStateManager = getViewStateManager();
+  const eventBus = getEventBus();
 
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [deleteInterviewId, setDeleteInterviewId] = useState<string | null>(null);
-  const [syncState, setSyncState] = useState<sync.SyncState>({
+  // UI state
+  const [, setRenderTrigger] = useState({});
+  const [applications, setApplications] = useState<JobApplicationModel[]>([]);
+  const [syncState, setSyncState] = useState<SyncState>({
     status: 'idle',
     lastSyncTime: null,
     failedAttempts: 0,
   });
 
-  const [formData, setFormData] = useState<NewApplication>({
-    company: '',
-    position: '',
-    status: 'Applied',
-    applied_date: new Date().toISOString().split('T')[0],
-    url: '',
-    location: '',
-    location_type: 'OnSite',
-    salary: '',
-    salary_min: undefined,
-    salary_max: undefined,
-    desired_salary_min: undefined,
-    desired_salary_max: undefined,
-    notes: '',
-    pdf_data: ''
-  });
+  // Initialize services
+  useEffect(() => {
+    const initializeServices = async () => {
+      try {
+        const db = await initDB();
+        setAppService(new ApplicationService(db));
+        setInterviewService(new InterviewService(db));
+      } catch (error) {
+        logError(error);
+      }
+    };
+    initializeServices();
+  }, []);
 
-  const [interviewData, setInterviewData] = useState<NewInterview>({
-    application_id: '',
-    date: new Date().toISOString().split('T')[0],
-    time: '09:00',
-    type: 'Phone Screen',
-    duration: 30,
-    notes: ''
-  });
+  // Load applications
+  const fetchApplications = useCallback(async () => {
+    if (!appService) return;
+    try {
+      viewStateManager.setLoading(true);
+      const apps = await appService.getAllApplications();
+      setApplications(apps);
+    } catch (error) {
+      logError(error);
+    } finally {
+      viewStateManager.setLoading(false);
+    }
+  }, [appService, viewStateManager]);
 
+  // Setup subscriptions and effects
   useEffect(() => {
     fetchApplications();
-    const unsubscribe = sync.subscribeToSync((state) => {
+    const unsubscribeSyncState = syncManager.subscribeToSync((state) => {
       setSyncState(state);
       if (state.status === 'success') {
         fetchApplications();
       }
     });
-    return unsubscribe;
-  }, []);
 
-  const fetchApplications = async () => {
-    try {
-      const data = await db.getApplications();
-      setApplications(data);
-    } catch (error) {
-      console.error('Failed to fetch applications:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const unsubscribeViewState = viewStateManager.subscribe(() => {
+      setRenderTrigger({});
+    });
 
+    return () => {
+      unsubscribeSyncState();
+      unsubscribeViewState();
+    };
+  }, [syncManager, viewStateManager, fetchApplications]);
+
+  // Handle application submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!appService) return;
+
     try {
-      await db.saveApplication({
+      const formData = viewStateManager.getFormData();
+      const editingApp = viewStateManager.getEditingApp();
+
+      await appService.saveApplication({
         ...formData,
-        id: editingApp?.id
+        id: editingApp?.id,
       });
-      
+
       await fetchApplications();
-      setView('main');
-      setEditingApp(null);
-      resetForm();
-      sync.performSync();
+      viewStateManager.setView('main');
+      viewStateManager.resetFormData();
+      syncManager.performSync();
     } catch (error) {
-      console.error('Failed to save application:', error);
+      logError(error);
     }
   };
 
+  // Handle interview submission
   const handleInterviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!interviewService || !appService) return;
+
     try {
-      // Check if this is the first interview for this application
-      const isFirstInterview = !editingInterview && (!editingApp?.interviews || editingApp.interviews.length === 0);
-      
-      await db.saveInterview({
-        ...interviewData,
-        id: editingInterview?.id
-      });
-      
-      // Auto-update status to Interviewing if it's the first interview
-      if (isFirstInterview && editingApp) {
-        await db.saveApplication({
-          ...editingApp,
-          status: 'Interviewing'
-        });
-        setFormData(prev => ({ ...prev, status: 'Interviewing' }));
+      const interviewData = viewStateManager.getInterviewData();
+      const editingInterview = viewStateManager.getEditingInterview();
+      const editingApp = viewStateManager.getEditingApp();
+
+      const { statusChanged } = await interviewService.saveInterview(
+        {
+          ...interviewData,
+          id: editingInterview?.id,
+        },
+        appService
+      );
+
+      if (statusChanged && editingApp) {
+        const updated = await appService.getApplication(editingApp.id);
+        if (updated) viewStateManager.setEditingApp(updated);
       }
-      
+
       await fetchApplications();
-      
-      // Update editingApp if we are editing
-      if (editingApp) {
-        const updated = await db.getApplications();
-        const freshApp = updated.find(a => a.id === editingApp.id);
-        if (freshApp) setEditingApp(freshApp);
-      }
-      
-      setView('form');
-      setEditingInterview(null);
-      sync.performSync();
+      viewStateManager.setView('form');
+      viewStateManager.resetInterviewData(interviewData.application_id);
+      syncManager.performSync();
     } catch (error) {
-      console.error('Failed to save interview:', error);
+      logError(error);
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      company: '',
-      position: '',
-      status: 'Applied',
-      applied_date: new Date().toISOString().split('T')[0],
-      url: '',
-      location: '',
-      location_type: 'OnSite',
-      salary: '',
-      salary_min: undefined,
-      salary_max: undefined,
-      desired_salary_min: undefined,
-      desired_salary_max: undefined,
-      notes: '',
-      pdf_data: ''
-    });
-  };
-
-  const resetInterviewForm = (applicationId: string) => {
-    setInterviewData({
-      application_id: applicationId,
-      date: new Date().toISOString().split('T')[0],
-      time: '09:00',
-      type: 'Phone Screen',
-      duration: 30,
-      notes: ''
-    });
-  };
-
+  // Handle delete application
   const handleDelete = async (id: string) => {
+    if (!appService) return;
     try {
-      await db.deleteApplication(id);
-      fetchApplications();
-      setDeleteConfirmId(null);
-      sync.performSync();
-    } catch (error) {
-      console.error('Failed to delete application:', error);
-    }
-  };
-
-  const handleDeleteInterview = async (id: string) => {
-    try {
-      await db.deleteInterview(id);
+      await appService.deleteApplication(id);
       await fetchApplications();
-      
-      if (editingApp) {
-        const updated = await db.getApplications();
-        const freshApp = updated.find(a => a.id === editingApp.id);
-        if (freshApp) setEditingApp(freshApp);
-      }
-      
-      setDeleteInterviewId(null);
-      sync.performSync();
+      viewStateManager.setDeleteConfirmId(null);
+      syncManager.performSync();
     } catch (error) {
-      console.error('Failed to delete interview:', error);
+      logError(error);
     }
   };
 
-  const handleEdit = (app: JobApplication) => {
-    setEditingApp(app);
-    setFormData({
-      company: app.company,
-      position: app.position,
-      status: app.status,
-      applied_date: app.applied_date,
-      url: app.url,
-      location: app.location,
-      location_type: app.location_type || 'OnSite',
-      salary: app.salary,
-      salary_min: app.salary_min,
-      salary_max: app.salary_max,
-      desired_salary_min: app.desired_salary_min,
-      desired_salary_max: app.desired_salary_max,
-      notes: app.notes,
-      pdf_data: app.pdf_data
-    });
-    setView('form');
+  // Handle delete interview
+  const handleDeleteInterview = async (id: string) => {
+    if (!interviewService) return;
+    try {
+      await interviewService.deleteInterview(id);
+      const editingApp = viewStateManager.getEditingApp();
+      if (editingApp) {
+        const updated = await appService?.getApplication(editingApp.id);
+        if (updated) viewStateManager.setEditingApp(updated);
+      }
+      await fetchApplications();
+      viewStateManager.setDeleteInterviewId(null);
+      syncManager.performSync();
+    } catch (error) {
+      logError(error);
+    }
   };
 
+  // Handle edit application
+  const handleEdit = (app: JobApplicationModel) => {
+    viewStateManager.loadFormDataFromApp(app);
+    viewStateManager.setView('form');
+  };
+
+  // Handle add interview
   const handleAddInterview = (applicationId: string) => {
-    resetInterviewForm(applicationId);
-    setEditingInterview(null);
-    setView('interview');
+    viewStateManager.resetInterviewData(applicationId);
+    viewStateManager.setView('interview');
   };
 
-  const handleEditInterview = (interview: Interview) => {
-    setEditingInterview(interview);
-    setInterviewData({
-      application_id: interview.application_id,
-      date: interview.date,
-      time: interview.time,
-      type: interview.type,
-      duration: interview.duration,
-      notes: interview.notes
-    });
-    setView('interview');
-  };
-
-  const filteredApps = applications.filter(app => {
-    const matchesSearch = 
-      app.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.position.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (app.location && app.location.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    if (!activeFilter || activeFilter === 'Total') return matchesSearch;
-    
-    if (activeFilter === 'Closed') {
-      return matchesSearch && (app.status === 'Rejected' || app.status === 'Withdrawn');
+  // Handle edit interview
+  const handleEditInterview = (interviewId: string) => {
+    const editingApp = viewStateManager.getEditingApp();
+    if (editingApp?.interviews) {
+      const interview = editingApp.interviews.find(i => i.id === interviewId);
+      if (interview) {
+        viewStateManager.loadInterviewDataFromModel(interview);
+        viewStateManager.setView('interview');
+      }
     }
-    
-    return matchesSearch && app.status === activeFilter;
-  });
-
-  const stats = {
-    total: applications.length,
-    applied: applications.filter(a => a.status === 'Applied').length,
-    interviewing: applications.filter(a => a.status === 'Interviewing').length,
-    offers: applications.filter(a => a.status === 'Offer').length,
-    closed: applications.filter(a => a.status === 'Rejected' || a.status === 'Withdrawn').length,
   };
 
+  // Get filtered applications
+  const filteredApps = appService
+    ? appService.filterApplications(
+      applications,
+      viewStateManager.getSearchQuery(),
+      viewStateManager.getActiveFilter()
+    )
+    : [];
+
+  // Calculate stats
+  const stats = viewStateManager.calculateStats(applications);
+
+  // View PDF
   const viewPdf = (pdfData: string) => {
     const newWindow = window.open();
     if (newWindow) {
@@ -265,14 +215,26 @@ export default function App() {
     }
   };
 
+  // Get current view and state values
+  const view = viewStateManager.getView();
+  const loading = viewStateManager.isLoading();
+  const editingApp = viewStateManager.getEditingApp();
+  const editingInterview = viewStateManager.getEditingInterview();
+  const deleteConfirmId = viewStateManager.getDeleteConfirmId();
+  const deleteInterviewId = viewStateManager.getDeleteInterviewId();
+  const formData = viewStateManager.getFormData();
+  const interviewData = viewStateManager.getInterviewData();
+  const searchQuery = viewStateManager.getSearchQuery();
+  const activeFilter = viewStateManager.getActiveFilter();
+
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-slate-900 font-sans flex flex-col">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-[40]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
-            <button 
-              onClick={() => setView('main')}
+            <button
+              onClick={() => viewStateManager.setView('main')}
               className="flex items-center gap-3 transition-transform active:scale-95 group"
             >
               <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100 group-hover:rotate-3 transition-transform">
@@ -301,17 +263,17 @@ export default function App() {
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.2 }}
             >
-              <MainView 
+              <MainView
                 stats={stats}
                 activeFilter={activeFilter}
-                setActiveFilter={setActiveFilter}
+                setActiveFilter={(f) => viewStateManager.setActiveFilter(f)}
                 searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
+                setSearchQuery={(q) => viewStateManager.setSearchQuery(q)}
                 loading={loading}
                 apps={filteredApps}
                 onEdit={handleEdit}
-                onDelete={setDeleteConfirmId}
-                onAdd={() => { setEditingApp(null); resetForm(); setView('form'); }}
+                onDelete={(id) => viewStateManager.setDeleteConfirmId(id)}
+                onAdd={() => { viewStateManager.resetFormData(); viewStateManager.setView('form'); }}
                 viewPdf={viewPdf}
               />
             </motion.div>
@@ -324,15 +286,15 @@ export default function App() {
               transition={{ duration: 0.2 }}
               className="py-12 px-4"
             >
-              <ApplicationForm 
+              <ApplicationForm
                 formData={formData}
-                setFormData={setFormData}
+                setFormData={(data) => viewStateManager.setFormData(data)}
                 onSubmit={handleSubmit}
-                onCancel={() => { setView('main'); setEditingApp(null); }}
+                onCancel={() => viewStateManager.setView('main')}
                 editingApp={editingApp}
                 onAddInterview={handleAddInterview}
                 onEditInterview={handleEditInterview}
-                onDeleteInterview={setDeleteInterviewId}
+                onDeleteInterview={(id) => viewStateManager.setDeleteInterviewId(id)}
               />
             </motion.div>
           ) : (
@@ -344,11 +306,11 @@ export default function App() {
               transition={{ duration: 0.2 }}
               className="py-12 px-4"
             >
-              <InterviewForm 
+              <InterviewForm
                 formData={interviewData}
-                setFormData={setInterviewData}
+                setFormData={(data) => viewStateManager.setInterviewData(data)}
                 onSubmit={handleInterviewSubmit}
-                onCancel={() => setView('form')}
+                onCancel={() => viewStateManager.setView('form')}
                 editingInterview={editingInterview}
                 companyName={editingApp?.company || 'Unknown Company'}
               />
@@ -361,14 +323,17 @@ export default function App() {
       <AnimatePresence>
         {(deleteConfirmId || deleteInterviewId) && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => { setDeleteConfirmId(null); setDeleteInterviewId(null); }}
+              onClick={() => {
+                viewStateManager.setDeleteConfirmId(null);
+                viewStateManager.setDeleteInterviewId(null);
+              }}
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -382,18 +347,21 @@ export default function App() {
                   {deleteInterviewId ? 'Delete Interview?' : 'Remove Application?'}
                 </h3>
                 <p className="text-slate-500 mb-10 text-lg">
-                  {deleteInterviewId 
+                  {deleteInterviewId
                     ? 'This will permanently remove this interview from your records.'
                     : 'This will permanently delete this opportunity from your tracker. This action cannot be reversed.'}
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <button 
-                    onClick={() => { setDeleteConfirmId(null); setDeleteInterviewId(null); }}
+                  <button
+                    onClick={() => {
+                      viewStateManager.setDeleteConfirmId(null);
+                      viewStateManager.setDeleteInterviewId(null);
+                    }}
                     className="flex-1 px-8 py-4 text-slate-600 font-bold hover:bg-slate-50 rounded-2xl transition-colors"
                   >
                     Cancel
                   </button>
-                  <button 
+                  <button
                     onClick={() => deleteInterviewId ? handleDeleteInterview(deleteInterviewId) : handleDelete(deleteConfirmId!)}
                     className="flex-1 px-8 py-4 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-2xl shadow-xl shadow-rose-200 transition-all active:scale-95"
                   >
@@ -410,12 +378,11 @@ export default function App() {
       <footer className="bg-white border-t border-slate-200 h-12 shrink-0 flex items-center px-6 text-xs font-bold text-slate-400 uppercase tracking-widest z-[40]">
         <div className="max-w-7xl mx-auto w-full flex justify-between items-center">
           <div className="flex items-center gap-6">
-            <button 
-              onClick={() => sync.manualSync()}
+            <button
+              onClick={() => syncManager.manualSync()}
               disabled={syncState.status === 'syncing'}
-              className={`flex items-center gap-2 group ${
-                syncState.status === 'syncing' ? 'text-indigo-600' : 'hover:text-indigo-600'
-              } transition-colors`}
+              className={`flex items-center gap-2 group ${syncState.status === 'syncing' ? 'text-indigo-600' : 'hover:text-indigo-600'
+                } transition-colors`}
             >
               <RefreshCw className={`w-4 h-4 ${syncState.status === 'syncing' ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
               <span>{syncState.status === 'syncing' ? 'Syncing...' : 'Sync Data'}</span>

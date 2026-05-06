@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Briefcase, 
-  Trash2, 
+import {
+  Briefcase,
+  Trash2,
   RefreshCw,
   Wifi,
   WifiOff,
@@ -88,7 +88,7 @@ export default function App() {
         ...formData,
         id: editingApp?.id
       });
-      
+
       await fetchApplications();
       setView('main');
       setEditingApp(null);
@@ -104,12 +104,12 @@ export default function App() {
     try {
       // Check if this is the first interview for this application
       const isFirstInterview = !editingInterview && (!editingApp?.interviews || editingApp.interviews.length === 0);
-      
+
       await db.saveInterview({
         ...interviewData,
         id: editingInterview?.id
       });
-      
+
       // Auto-update status to Interviewing if it's the first interview
       if (isFirstInterview && editingApp) {
         await db.saveApplication({
@@ -118,16 +118,16 @@ export default function App() {
         });
         setFormData(prev => ({ ...prev, status: 'Interviewing' }));
       }
-      
+
       await fetchApplications();
-      
+
       // Update editingApp if we are editing
       if (editingApp) {
         const updated = await db.getApplications();
         const freshApp = updated.find(a => a.id === editingApp.id);
         if (freshApp) setEditingApp(freshApp);
       }
-      
+
       setView('form');
       setEditingInterview(null);
       sync.performSync();
@@ -181,13 +181,13 @@ export default function App() {
     try {
       await db.deleteInterview(id);
       await fetchApplications();
-      
+
       if (editingApp) {
         const updated = await db.getApplications();
         const freshApp = updated.find(a => a.id === editingApp.id);
         if (freshApp) setEditingApp(freshApp);
       }
-      
+
       setDeleteInterviewId(null);
       sync.performSync();
     } catch (error) {
@@ -236,17 +236,17 @@ export default function App() {
   };
 
   const filteredApps = applications.filter(app => {
-    const matchesSearch = 
+    const matchesSearch =
       app.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
       app.position.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (app.location && app.location.toLowerCase().includes(searchQuery.toLowerCase()));
-    
+
     if (!activeFilter || activeFilter === 'Total') return matchesSearch;
-    
+
     if (activeFilter === 'Closed') {
       return matchesSearch && (app.status === 'Rejected' || app.status === 'Withdrawn');
     }
-    
+
     return matchesSearch && app.status === activeFilter;
   });
 
@@ -271,7 +271,7 @@ export default function App() {
       <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-[40]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
-            <button 
+            <button
               onClick={() => setView('main')}
               className="flex items-center gap-3 transition-transform active:scale-95 group"
             >
@@ -283,7 +283,7 @@ export default function App() {
             <div className="flex items-center gap-4">
               {view === 'main' && (
                 <span className="hidden sm:inline-flex items-center px-3 py-1 bg-slate-100 rounded-lg text-xs font-bold text-slate-500">
-                  {stats.total} OPPORTUNITIES
+                  {stats.total - stats.closed} OPPORTUNITIES
                 </span>
               )}
             </div>
@@ -301,7 +301,7 @@ export default function App() {
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.2 }}
             >
-              <MainView 
+              <MainView
                 stats={stats}
                 activeFilter={activeFilter}
                 setActiveFilter={setActiveFilter}
@@ -324,7 +324,7 @@ export default function App() {
               transition={{ duration: 0.2 }}
               className="py-12 px-4"
             >
-              <ApplicationForm 
+              <ApplicationForm
                 formData={formData}
                 setFormData={setFormData}
                 onSubmit={handleSubmit}
@@ -344,7 +344,7 @@ export default function App() {
               transition={{ duration: 0.2 }}
               className="py-12 px-4"
             >
-              <InterviewForm 
+              <InterviewForm
                 formData={interviewData}
                 setFormData={setInterviewData}
                 onSubmit={handleInterviewSubmit}
@@ -361,14 +361,14 @@ export default function App() {
       <AnimatePresence>
         {(deleteConfirmId || deleteInterviewId) && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => { setDeleteConfirmId(null); setDeleteInterviewId(null); }}
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -382,18 +382,18 @@ export default function App() {
                   {deleteInterviewId ? 'Delete Interview?' : 'Remove Application?'}
                 </h3>
                 <p className="text-slate-500 mb-10 text-lg">
-                  {deleteInterviewId 
+                  {deleteInterviewId
                     ? 'This will permanently remove this interview from your records.'
                     : 'This will permanently delete this opportunity from your tracker. This action cannot be reversed.'}
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <button 
+                  <button
                     onClick={() => { setDeleteConfirmId(null); setDeleteInterviewId(null); }}
                     className="flex-1 px-8 py-4 text-slate-600 font-bold hover:bg-slate-50 rounded-2xl transition-colors"
                   >
                     Cancel
                   </button>
-                  <button 
+                  <button
                     onClick={() => deleteInterviewId ? handleDeleteInterview(deleteInterviewId) : handleDelete(deleteConfirmId!)}
                     className="flex-1 px-8 py-4 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-2xl shadow-xl shadow-rose-200 transition-all active:scale-95"
                   >
@@ -410,12 +410,11 @@ export default function App() {
       <footer className="bg-white border-t border-slate-200 h-12 shrink-0 flex items-center px-6 text-xs font-bold text-slate-400 uppercase tracking-widest z-[40]">
         <div className="max-w-7xl mx-auto w-full flex justify-between items-center">
           <div className="flex items-center gap-6">
-            <button 
+            <button
               onClick={() => sync.manualSync()}
               disabled={syncState.status === 'syncing'}
-              className={`flex items-center gap-2 group ${
-                syncState.status === 'syncing' ? 'text-indigo-600' : 'hover:text-indigo-600'
-              } transition-colors`}
+              className={`flex items-center gap-2 group ${syncState.status === 'syncing' ? 'text-indigo-600' : 'hover:text-indigo-600'
+                } transition-colors`}
             >
               <RefreshCw className={`w-4 h-4 ${syncState.status === 'syncing' ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
               <span>{syncState.status === 'syncing' ? 'Syncing...' : 'Sync Data'}</span>

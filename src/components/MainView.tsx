@@ -1,13 +1,13 @@
 import React from 'react';
-import { 
-  Plus, 
-  Search, 
-  Briefcase, 
-  MapPin, 
-  Calendar, 
-  ExternalLink, 
-  Trash2, 
-  Edit2, 
+import {
+  Plus,
+  Search,
+  Briefcase,
+  MapPin,
+  Calendar,
+  ExternalLink,
+  Trash2,
+  Edit2,
   Loader2,
   DollarSign,
   FileText,
@@ -51,6 +51,7 @@ export const MainView: React.FC<MainViewProps> = ({
   onAdd,
   viewPdf
 }) => {
+  console.log(apps);
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20">
       {/* Welcome & Actions */}
@@ -59,7 +60,7 @@ export const MainView: React.FC<MainViewProps> = ({
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Your Pipeline</h2>
           <p className="text-slate-500 mt-1 text-lg">Track and manage your professional opportunities.</p>
         </div>
-        <button 
+        <button
           onClick={onAdd}
           className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3.5 rounded-2xl transition-all shadow-xl shadow-indigo-200 font-bold active:scale-95 shrink-0"
           id="add-app-main-btn"
@@ -95,8 +96,8 @@ export const MainView: React.FC<MainViewProps> = ({
       <div className="flex flex-col md:flex-row gap-4 mb-8">
         <div className="relative flex-1 group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 w-5 h-5 transition-colors" />
-          <input 
-            type="text" 
+          <input
+            type="text"
             placeholder="Search by company, position, or location..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -119,12 +120,12 @@ export const MainView: React.FC<MainViewProps> = ({
             </div>
             <h3 className="text-2xl font-bold text-slate-900 mb-2">No applications found</h3>
             <p className="text-slate-500 text-lg max-w-sm mx-auto mb-8">
-              {searchQuery || activeFilter 
-                ? "Try adjusting your filters or search terms to find what you're looking for." 
+              {searchQuery || activeFilter
+                ? "Try adjusting your filters or search terms to find what you're looking for."
                 : "Your pipeline is empty! Click the 'Add New' button to track your first opportunity."}
             </p>
             {(searchQuery || activeFilter) && (
-              <button 
+              <button
                 onClick={() => { setSearchQuery(''); setActiveFilter(null); }}
                 className="text-indigo-600 font-bold hover:text-indigo-700"
               >
@@ -134,8 +135,23 @@ export const MainView: React.FC<MainViewProps> = ({
           </div>
         ) : (
           <AnimatePresence mode="popLayout">
-            {apps.map((app) => (
-              <motion.div
+            {apps.map((app) => {
+              let appRangeString = "";
+              let buildMin = (new Boolean(app.salary_min)).valueOf();
+              let buildMax = (new Boolean(app.salary_max)).valueOf();
+              let min = "???";
+              let max = "???";
+              if (buildMin || buildMax) {
+                if (buildMin) {
+                  min = app.salary_min < 1000 ? app.salary_min : (app.salary_min / 1000).toFixed(0);
+                }
+                if (buildMax) {
+                  max = app.salary_max < 1000 ? app.salary_max : (app.salary_max / 1000).toFixed(0);
+                }
+                appRangeString = `${min}k - ${max}k`;
+              }
+
+              return (<motion.div
                 key={app.id}
                 layout
                 initial={{ opacity: 0, scale: 0.98, y: 10 }}
@@ -144,7 +160,7 @@ export const MainView: React.FC<MainViewProps> = ({
                 className="bg-white border border-slate-200 rounded-3xl p-6 hover:shadow-xl hover:border-indigo-100 transition-all group relative overflow-hidden"
               >
                 <div className="absolute top-0 left-0 w-1.5 h-full bg-slate-100 group-hover:bg-indigo-500 transition-colors" />
-                
+
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pl-2">
                   <div className="flex items-start gap-4">
                     <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 shrink-0 shadow-sm group-hover:bg-white transition-colors">
@@ -172,11 +188,7 @@ export const MainView: React.FC<MainViewProps> = ({
                         {(app.salary_min || app.salary_max) ? (
                           <span className="flex items-center gap-1.5 font-medium text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-100">
                             <DollarSign className="w-3.5 h-3.5" />
-                            {app.salary_min && app.salary_max 
-                              ? `${(app.salary_min/1000).toFixed(0)}k - ${(app.salary_max/1000).toFixed(0)}k`
-                              : app.salary_min 
-                                ? `${(app.salary_min/1000).toFixed(0)}k+`
-                                : `Up to ${(app.salary_max!/1000).toFixed(0)}k`}
+                            {appRangeString}
                           </span>
                         ) : app.salary && (
                           <span className="flex items-center gap-1.5 font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg">
@@ -185,7 +197,7 @@ export const MainView: React.FC<MainViewProps> = ({
                           </span>
                         )}
                         {app.pdf_data && (
-                          <button 
+                          <button
                             onClick={(e) => { e.stopPropagation(); viewPdf(app.pdf_data!); }}
                             className="flex items-center gap-1.5 text-indigo-600 hover:text-indigo-700 font-bold decoration-indigo-600/30 underline underline-offset-4"
                           >
@@ -208,16 +220,16 @@ export const MainView: React.FC<MainViewProps> = ({
                       {STATUS_ICONS[app.status]}
                       {app.status}
                     </span>
-                    
+
                     <div className="flex items-center gap-2">
-                      <button 
+                      <button
                         onClick={() => onEdit(app)}
                         className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all active:scale-95 bg-slate-50 md:bg-transparent"
                         title="Edit Application"
                       >
                         <Edit2 className="w-5 h-5" />
                       </button>
-                      <button 
+                      <button
                         onClick={() => onDelete(app.id)}
                         className="p-3 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all active:scale-95 bg-slate-50 md:bg-transparent"
                         title="Delete Application"
@@ -225,9 +237,9 @@ export const MainView: React.FC<MainViewProps> = ({
                         <Trash2 className="w-5 h-5" />
                       </button>
                       {app.url && (
-                        <a 
-                          href={app.url} 
-                          target="_blank" 
+                        <a
+                          href={app.url}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all active:scale-95 bg-slate-50 md:bg-transparent"
                           title="View Online Listing"
@@ -239,7 +251,8 @@ export const MainView: React.FC<MainViewProps> = ({
                   </div>
                 </div>
               </motion.div>
-            ))}
+              );
+            })}
           </AnimatePresence>
         )}
       </div>

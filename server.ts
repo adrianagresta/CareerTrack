@@ -88,6 +88,7 @@ try {
       if (!columns.includes('salary_max')) db.exec("ALTER TABLE applications ADD COLUMN salary_max INTEGER");
       if (!columns.includes('desired_salary_min')) db.exec("ALTER TABLE applications ADD COLUMN desired_salary_min INTEGER");
       if (!columns.includes('desired_salary_max')) db.exec("ALTER TABLE applications ADD COLUMN desired_salary_max INTEGER");
+      if (!columns.includes('dirty')) db.exec("ALTER TABLE applications ADD COLUMN dirty INTEGER DEFAULT 0");
     }
 
     // Check for interviews table
@@ -129,6 +130,7 @@ try {
         pdf_data TEXT,
         version INTEGER DEFAULT 0,
         is_deleted INTEGER DEFAULT 0,
+        dirty INTEGER DEFAULT 0,
         updated_at INTEGER,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -182,8 +184,8 @@ async function startServer() {
     // 1. Process incoming changes from client
     if (changes && Array.isArray(changes)) {
       const insertOrUpdate = db.prepare(`
-        INSERT INTO applications (id, company, position, status, applied_date, url, location, location_type, salary, salary_min, salary_max, desired_salary_min, desired_salary_max, notes, pdf_data, version, is_deleted, updated_at)
-        VALUES (@id, @company, @position, @status, @applied_date, @url, @location, @location_type, @salary, @salary_min, @salary_max, @desired_salary_min, @desired_salary_max, @notes, @pdf_data, @version, @is_deleted, @updated_at)
+        INSERT INTO applications (id, company, position, status, applied_date, url, location, location_type, salary, salary_min, salary_max, desired_salary_min, desired_salary_max, notes, pdf_data, version, is_deleted, dirty, updated_at)
+        VALUES (@id, @company, @position, @status, @applied_date, @url, @location, @location_type, @salary, @salary_min, @salary_max, @desired_salary_min, @desired_salary_max, @notes, @pdf_data, @version, @is_deleted, @dirty, @updated_at)
         ON CONFLICT(id) DO UPDATE SET
           company = excluded.company,
           position = excluded.position,
@@ -201,6 +203,7 @@ async function startServer() {
           pdf_data = excluded.pdf_data,
           version = excluded.version,
           is_deleted = excluded.is_deleted,
+          dirty = 0,
           updated_at = excluded.updated_at
         WHERE excluded.updated_at > applications.updated_at OR applications.updated_at IS NULL
       `);
@@ -232,6 +235,7 @@ async function startServer() {
               pdf_data: item.pdf_data || null,
               version: maxVer,
               is_deleted: item.is_deleted ? 1 : 0,
+              dirty: 0,
               updated_at: item.updated_at || Date.now()
             });
           }
@@ -291,12 +295,79 @@ async function startServer() {
     const serverVersion = metaRow?.value ?? 0;
     const serverChanges = db.prepare("SELECT * FROM applications WHERE version > ?").all(syncVer);
     const serverInterviewChanges = db.prepare("SELECT * FROM interviews WHERE version > ?").all(syncVer);
+    const dirtyIds = db.prepare("SELECT id FROM applications WHERE dirty = 1 AND is_deleted = 0").all() as { id: string }[];
 
     res.json({
       server_version: serverVersion,
       changes: serverChanges,
-      interview_changes: serverInterviewChanges
+      interview_changes: serverInterviewChanges,
+      dirty_ids: dirtyIds.map(row => row.id)
     });
+  });
+
+  // Push individual application endpoint
+  app.post("/api/applications/:id/push", (req, res) => {
+    const { id } = req.params;
+    const app = req.body;
+    const version = getNextVersion();
+    const now = Date.now();
+
+    db.prepare(`
+      INSERT INTO applications (id, company, position, status, applied_date, url, location, location_type, salary, salary_min, salary_max, desired_salary_min, desired_salary_max, notes, pdf_data, version, is_deleted, dirty, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        company = excluded.company,
+        position = excluded.position,
+        status = excluded.status,
+        applied_date = excluded.applied_date,
+        url = excluded.url,
+        location = excluded.location,
+        location_type = excluded.location_type,
+        salary = excluded.salary,
+        salary_min = excluded.salary_min,
+        salary_max = excluded.salary_max,
+        desired_salary_min = excluded.desired_salary_min,
+        desired_salary_max = excluded.desired_salary_max,
+        notes = excluded.notes,
+        pdf_data = excluded.pdf_data,
+        version = excluded.version,
+        is_deleted = excluded.is_deleted,
+        dirty = 0,
+        updated_at = excluded.updated_at
+    `).run(
+      id,
+      app.company,
+      app.position,
+      app.status || 'Applied',
+      app.applied_date || null,
+      app.url || null,
+      app.location || null,
+      app.location_type || 'OnSite',
+      app.salary || null,
+      app.salary_min ?? null,
+      app.salary_max ?? null,
+      app.desired_salary_min ?? null,
+      app.desired_salary_max ?? null,
+      app.notes || null,
+      app.pdf_data || null,
+      version,
+      app.is_deleted ? 1 : 0,
+      0,
+      now
+    );
+
+    res.json({ success: true, id });
+  });
+
+  // Get individual application endpoint
+  app.get("/api/applications/:id/get", (req, res) => {
+    const { id } = req.params;
+    const app = db.prepare("SELECT * FROM applications WHERE id = ?").get(id) as any;
+    if (!app) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+    const interviews = db.prepare("SELECT * FROM interviews WHERE application_id = ? ORDER BY date ASC, time ASC").all(id);
+    res.json({ ...app, interviews });
   });
 
   // Legacy API Routes

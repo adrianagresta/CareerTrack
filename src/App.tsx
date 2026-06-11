@@ -27,6 +27,7 @@ export default function App() {
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteInterviewId, setDeleteInterviewId] = useState<string | null>(null);
+  const [showPushAllConfirm, setShowPushAllConfirm] = useState(false);
   const [syncState, setSyncState] = useState<sync.SyncState>({
     status: 'idle',
     lastSyncTime: null,
@@ -357,6 +358,54 @@ export default function App() {
         </AnimatePresence>
       </main>
 
+      {/* Push All Confirmation Overlay */}
+      <AnimatePresence>
+        {showPushAllConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowPushAllConfirm(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden p-10"
+            >
+              <div className="text-center">
+                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <RefreshCw className="text-blue-600 w-10 h-10" />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-900 mb-3">Push All Applications?</h3>
+                <p className="text-slate-500 mb-10 text-lg">
+                  Are you sure you wish to overwrite all server data with the contents of your local application data?
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={() => setShowPushAllConfirm(false)}
+                    className="flex-1 px-8 py-4 text-slate-600 font-bold hover:bg-slate-50 rounded-2xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowPushAllConfirm(false);
+                      sync.pushAllApplications();
+                    }}
+                    className="flex-1 px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl shadow-xl shadow-blue-200 transition-all active:scale-95"
+                  >
+                    Yes, Push All
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Delete Confirmation Overlay */}
       <AnimatePresence>
         {(deleteConfirmId || deleteInterviewId) && (
@@ -418,6 +467,14 @@ export default function App() {
             >
               <RefreshCw className={`w-4 h-4 ${syncState.status === 'syncing' ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
               <span>{syncState.status === 'syncing' ? 'Syncing...' : 'Sync Data'}</span>
+            </button>
+            <button
+              onClick={() => setShowPushAllConfirm(true)}
+              disabled={syncState.status === 'syncing'}
+              className={`flex items-center gap-2 group ${syncState.status === 'syncing' ? 'text-slate-300' : 'hover:text-indigo-600'
+                } transition-colors border-l border-slate-200 pl-6`}
+            >
+              <span>Push All</span>
             </button>
             {syncState.lastSyncTime && (
               <span className="hidden sm:inline border-l border-slate-200 pl-6">

@@ -42,6 +42,7 @@ export interface JobApplication {
   pdf_data?: string;
   version: number;
   is_deleted: number; // 0 or 1
+  dirty: number; // 0 or 1 - indicates local changes need syncing
   updated_at: number; // timestamp
   created_at: string;
   interviews?: Interview[];
@@ -74,4 +75,10 @@ export interface SyncResponse {
   server_version: number;
   changes: JobApplication[];
   interview_changes?: Interview[];
+  dirty_ids?: string[];
+}
+
+export interface PushResponse {
+  success: boolean;
+  id: string;
 }

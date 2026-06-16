@@ -4,6 +4,8 @@ import Database from "better-sqlite3";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import * as fs from "fs";
+import puppeteer from "puppeteer";
+import * as os from "os";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -303,6 +305,70 @@ async function startServer() {
       interview_changes: serverInterviewChanges,
       dirty_ids: dirtyIds.map(row => row.id)
     });
+  });
+
+  // Fetch job description PDF endpoint using puppeteer
+  app.post("/api/fetch-pdf", async (req, res) => {
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: "URL is required" });
+    }
+
+    let browser;
+    let tempFilePath = "";
+
+    try {
+      const tempDir = os.tmpdir();
+      const uniqueName = `job-${Date.now()}-${Math.random().toString(36).substring(2, 9)}.pdf`;
+      tempFilePath = path.join(tempDir, uniqueName);
+
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      });
+
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1280, height: 800 });
+      
+      // Navigate to the job URL
+      await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
+
+      // Generate PDF
+      await page.pdf({
+        path: tempFilePath,
+        format: "A4",
+        printBackground: true,
+        margin: { top: "20px", bottom: "20px", left: "20px", right: "20px" },
+      });
+
+      await browser.close();
+      browser = null;
+
+      // Read the generated PDF from the temp file
+      const pdfBuffer = fs.readFileSync(tempFilePath);
+
+      // Send PDF to the client
+      res.contentType("application/pdf");
+      res.send(pdfBuffer);
+    } catch (err: any) {
+      logError(err);
+      res.status(500).json({ error: err.message || "Failed to generate PDF from URL" });
+    } finally {
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (e) {
+          logError(e);
+        }
+      }
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        try {
+          fs.unlinkSync(tempFilePath);
+        } catch (e) {
+          logError(e);
+        }
+      }
+    }
   });
 
   // Push individual application endpoint

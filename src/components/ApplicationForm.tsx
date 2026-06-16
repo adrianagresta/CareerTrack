@@ -1,6 +1,6 @@
 import React from 'react';
 import { JobApplication, ApplicationStatus, NewApplication, Interview } from '../types';
-import { CheckCircle2, Upload, X, Plus, Calendar, Clock, Timer, MessageSquare, Trash2, Edit3 } from 'lucide-react';
+import { CheckCircle2, Upload, X, Plus, Calendar, Clock, Timer, MessageSquare, Trash2, Edit3, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface ApplicationFormProps {
@@ -24,6 +24,71 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
   onEditInterview,
   onDeleteInterview
 }) => {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isFetchingPdf, setIsFetchingPdf] = React.useState(false);
+
+  const isValidUrl = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  const handleFetchPdf = async () => {
+    const jobUrl = formData.url;
+    if (!jobUrl || !isValidUrl(jobUrl)) {
+      alert('Please enter a valid URL in the Job URL field first.');
+      return;
+    }
+
+    setIsFetchingPdf(true);
+    try {
+      const response = await fetch('/api/fetch-pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url: jobUrl }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to fetch and generate PDF.');
+      }
+
+      const blob = await response.blob();
+      
+      if (blob.size > 5 * 1024 * 1024) {
+        alert('Generated PDF size is greater than 5MB.');
+        return;
+      }
+
+      const file = new File([blob], 'fetched_job.pdf', { type: 'application/pdf' });
+
+      // Programmatically attach to the hidden file input
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      if (fileInputRef.current) {
+        fileInputRef.current.files = dataTransfer.files;
+      }
+
+      // Convert to Base64 and store in formData.pdf_data
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, pdf_data: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+
+    } catch (error: any) {
+      console.error(error);
+      alert(`Error fetching job PDF: ${error.message || error}`);
+    } finally {
+      setIsFetchingPdf(false);
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -202,18 +267,37 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
                 </span>
                 <input 
                   type="file" 
+                  ref={fileInputRef}
                   accept=".pdf"
                   onChange={handleFileChange}
                   className="hidden"
                 />
               </label>
+              <button
+                type="button"
+                onClick={handleFetchPdf}
+                disabled={!isValidUrl(formData.url || '') || isFetchingPdf}
+                className={`flex items-center justify-center gap-2 px-6 py-3 border rounded-2xl font-semibold transition-all ${
+                  isValidUrl(formData.url || '') && !isFetchingPdf
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 cursor-pointer shadow-sm active:scale-95'
+                    : 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                <Globe className="w-5 h-5" />
+                <span>{isFetchingPdf ? 'Fetching PDF...' : 'Fetch job PDF'}</span>
+              </button>
               {formData.pdf_data && (
                 <div className="flex items-center gap-3 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100 flex-1">
                   <CheckCircle2 className="w-5 h-5 shrink-0" />
                   <span className="text-sm font-medium truncate">PDF Attached Successfully</span>
                   <button 
                     type="button"
-                    onClick={() => setFormData({ ...formData, pdf_data: '' })}
+                    onClick={() => {
+                      setFormData({ ...formData, pdf_data: '' });
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = '';
+                      }
+                    }}
                     className="text-rose-500 hover:text-rose-600 p-1 hover:bg-rose-100/50 rounded-lg transition-colors ml-auto"
                   >
                     <X className="w-4 h-4" />

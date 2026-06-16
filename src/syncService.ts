@@ -30,13 +30,13 @@ function notify() {
   statusListeners.forEach(l => l(syncState));
 }
 
-export async function performSync() {
-  if (syncState.status === 'offline' && syncState.failedAttempts >= MAX_ATTEMPTS) {
+export async function performSync(isManual: boolean = false) {
+  if (!isManual && syncState.status === 'offline' && syncState.failedAttempts >= MAX_ATTEMPTS) {
     // Don't auto-sync if hard-offline
     return;
   }
 
-  syncState.status = 'syncing';
+  syncState = { ...syncState, status: 'syncing' };
   notify();
 
   try {
@@ -104,18 +104,19 @@ export async function performSync() {
     // After a success, set back to idle after a delay
     setTimeout(() => {
       if (syncState.status === 'success') {
-        syncState.status = 'idle';
+        syncState = { ...syncState, status: 'idle' };
         notify();
       }
     }, 3000);
 
   } catch (error) {
-    syncState.failedAttempts++;
-    if (syncState.failedAttempts >= MAX_ATTEMPTS) {
-      syncState.status = 'offline';
-    } else {
-      syncState.status = 'error';
-    }
+    const failedAttempts = syncState.failedAttempts + 1;
+    const status = failedAttempts >= MAX_ATTEMPTS ? 'offline' : 'error';
+    syncState = {
+      ...syncState,
+      failedAttempts,
+      status,
+    };
     console.error('Sync error:', error);
   } finally {
     notify();
@@ -124,13 +125,12 @@ export async function performSync() {
 
 // Manual sync trigger
 export async function manualSync() {
-  syncState.failedAttempts = 0; // Reset attempts
-  await performSync();
+  await performSync(true);
 }
 
 // Push all applications to server
 export async function pushAllApplications() {
-  syncState.status = 'syncing';
+  syncState = { ...syncState, status: 'syncing' };
   notify();
 
   try {
@@ -164,18 +164,19 @@ export async function pushAllApplications() {
     // After a success, set back to idle after a delay
     setTimeout(() => {
       if (syncState.status === 'success') {
-        syncState.status = 'idle';
+        syncState = { ...syncState, status: 'idle' };
         notify();
       }
     }, 3000);
 
   } catch (error) {
-    syncState.failedAttempts++;
-    if (syncState.failedAttempts >= MAX_ATTEMPTS) {
-      syncState.status = 'offline';
-    } else {
-      syncState.status = 'error';
-    }
+    const failedAttempts = syncState.failedAttempts + 1;
+    const status = failedAttempts >= MAX_ATTEMPTS ? 'offline' : 'error';
+    syncState = {
+      ...syncState,
+      failedAttempts,
+      status,
+    };
     console.error('Push All error:', error);
   } finally {
     notify();

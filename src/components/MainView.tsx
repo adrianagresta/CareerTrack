@@ -21,6 +21,7 @@ import { STATUS_COLORS, STATUS_ICONS } from '../constants';
 interface MainViewProps {
   stats: {
     total: number;
+    wishlist: number;
     applied: number;
     interviewing: number;
     offers: number;
@@ -71,9 +72,10 @@ export const MainView: React.FC<MainViewProps> = ({
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-10">
         {[
           { label: 'Total', value: stats.total, color: 'text-indigo-600', filter: 'Total' },
+          { label: 'Wishlist', value: stats.wishlist, color: 'text-slate-600', filter: 'Wishlist' },
           { label: 'Applied', value: stats.applied, color: 'text-blue-600', filter: 'Applied' },
           { label: 'Interviewing', value: stats.interviewing, color: 'text-amber-600', filter: 'Interviewing' },
           { label: 'Offers', value: stats.offers, color: 'text-emerald-600', filter: 'Offer' },

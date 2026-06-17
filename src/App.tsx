@@ -253,6 +253,7 @@ export default function App() {
 
   const stats = {
     total: applications.length,
+    wishlist: applications.filter(a => a.status === 'Wishlist').length,
     applied: applications.filter(a => a.status === 'Applied').length,
     interviewing: applications.filter(a => a.status === 'Interviewing').length,
     offers: applications.filter(a => a.status === 'Offer').length,

@@ -251,6 +251,10 @@ export default function App() {
     return matchesSearch && app.status === activeFilter;
   });
 
+  const displayedApps = activeFilter !== null
+    ? [...filteredApps].sort((a, b) => b.applied_date.localeCompare(a.applied_date))
+    : filteredApps;
+
   const stats = {
     total: applications.length,
     wishlist: applications.filter(a => a.status === 'Wishlist').length,
@@ -310,7 +314,7 @@ export default function App() {
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 loading={loading}
-                apps={filteredApps}
+                apps={displayedApps}
                 onEdit={handleEdit}
                 onDelete={setDeleteConfirmId}
                 onAdd={() => { setEditingApp(null); resetForm(); setView('form'); }}

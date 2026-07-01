@@ -39,6 +39,12 @@ interface MainViewProps {
   viewPdf: (pdfData: string) => void;
 }
 
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
 export const MainView: React.FC<MainViewProps> = ({
   stats,
   activeFilter,
@@ -188,7 +194,7 @@ export const MainView: React.FC<MainViewProps> = ({
                         </span>
                         <span className="flex items-center gap-1.5 font-medium">
                           <Calendar className="w-4 h-4 text-slate-400" />
-                          Applied {new Date(app.applied_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                          Applied {formatDate(app.applied_date)}
                         </span>
                         {(app.salary_min || app.salary_max) ? (
                           <span className="flex items-center gap-1.5 font-medium text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-100">

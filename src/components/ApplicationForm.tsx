@@ -14,6 +14,12 @@ interface ApplicationFormProps {
   onDeleteInterview: (id: string) => void;
 }
 
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
 export const ApplicationForm: React.FC<ApplicationFormProps> = ({
   formData,
   setFormData,
@@ -351,7 +357,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
                                 {interview.type}
                               </span>
                               <span className="text-xs font-bold text-slate-400">
-                                {new Date(interview.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                {formatDate(interview.date)}
                               </span>
                             </div>
                             <div className="flex items-center gap-4 text-sm font-medium text-slate-600">

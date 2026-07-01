@@ -88,7 +88,10 @@ export const MainView: React.FC<MainViewProps> = ({
             color={stat.color}
             filter={stat.filter}
             isActive={activeFilter === stat.filter}
-            onClick={() => setActiveFilter(activeFilter === stat.filter ? null : stat.filter)}
+            onClick={() => {
+              setSearchQuery('');
+              setActiveFilter(activeFilter === stat.filter ? null : stat.filter);
+            }}
             index={i}
           />
         ))}

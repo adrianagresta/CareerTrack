@@ -179,11 +179,11 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
               </select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 block ml-1">Applied Date</label>
+              <label className="text-sm font-semibold text-slate-700 block ml-1">Status Date</label>
               <input 
                 type="date" 
-                value={formData.applied_date ?? ''}
-                onChange={e => setFormData({...formData, applied_date: e.target.value})}
+                value={formData.status_date ?? ''}
+                onChange={e => setFormData({...formData, status_date: e.target.value})}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
               />
             </div>

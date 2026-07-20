@@ -47,8 +47,17 @@ async function migrateApplicationsDirtyBit(db: IDBPDatabase) {
   const apps = await store.getAll();
 
   for (const app of apps) {
+    let changed = false;
     if (app.dirty === undefined) {
       app.dirty = 1;
+      changed = true;
+    }
+    if (app.applied_date !== undefined) {
+      app.status_date = app.applied_date;
+      delete app.applied_date;
+      changed = true;
+    }
+    if (changed) {
       store.put(app);
     }
   }

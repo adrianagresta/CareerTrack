@@ -37,7 +37,7 @@ try {
           company TEXT NOT NULL,
           position TEXT NOT NULL,
           status TEXT DEFAULT 'Applied',
-          applied_date TEXT,
+          status_date TEXT,
           url TEXT,
           location TEXT,
           location_type TEXT,
@@ -56,7 +56,7 @@ try {
       `);
       // Restore data with string IDs
       const insert = db.prepare(`
-        INSERT INTO applications (id, company, position, status, applied_date, url, location, location_type, salary, salary_min, salary_max, desired_salary_min, desired_salary_max, notes, pdf_data, version, is_deleted, updated_at, created_at)
+        INSERT INTO applications (id, company, position, status, status_date, url, location, location_type, salary, salary_min, salary_max, desired_salary_min, desired_salary_max, notes, pdf_data, version, is_deleted, updated_at, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const row of data) {
@@ -65,7 +65,7 @@ try {
           row.company,
           row.position,
           row.status,
-          row.applied_date,
+          row.status_date || row.applied_date || null,
           row.url,
           row.location,
           row.location_type || 'OnSite',
@@ -85,6 +85,10 @@ try {
     } else {
       // Check for new columns and add them if they don't exist
       const columns = tableInfo.map(c => c.name);
+      if (columns.includes('applied_date')) {
+        console.log("Migrating database: Renaming applied_date to status_date");
+        db.exec("ALTER TABLE applications RENAME COLUMN applied_date TO status_date;");
+      }
       if (!columns.includes('location_type')) db.exec("ALTER TABLE applications ADD COLUMN location_type TEXT");
       if (!columns.includes('salary_min')) db.exec("ALTER TABLE applications ADD COLUMN salary_min INTEGER");
       if (!columns.includes('salary_max')) db.exec("ALTER TABLE applications ADD COLUMN salary_max INTEGER");
@@ -119,7 +123,7 @@ try {
         company TEXT NOT NULL,
         position TEXT NOT NULL,
         status TEXT DEFAULT 'Applied',
-        applied_date TEXT,
+        status_date TEXT,
         url TEXT,
         location TEXT,
         location_type TEXT,
@@ -186,13 +190,13 @@ async function startServer() {
     // 1. Process incoming changes from client
     if (changes && Array.isArray(changes)) {
       const insertOrUpdate = db.prepare(`
-        INSERT INTO applications (id, company, position, status, applied_date, url, location, location_type, salary, salary_min, salary_max, desired_salary_min, desired_salary_max, notes, pdf_data, version, is_deleted, dirty, updated_at)
-        VALUES (@id, @company, @position, @status, @applied_date, @url, @location, @location_type, @salary, @salary_min, @salary_max, @desired_salary_min, @desired_salary_max, @notes, @pdf_data, @version, @is_deleted, @dirty, @updated_at)
+        INSERT INTO applications (id, company, position, status, status_date, url, location, location_type, salary, salary_min, salary_max, desired_salary_min, desired_salary_max, notes, pdf_data, version, is_deleted, dirty, updated_at)
+        VALUES (@id, @company, @position, @status, @status_date, @url, @location, @location_type, @salary, @salary_min, @salary_max, @desired_salary_min, @desired_salary_max, @notes, @pdf_data, @version, @is_deleted, @dirty, @updated_at)
         ON CONFLICT(id) DO UPDATE SET
           company = excluded.company,
           position = excluded.position,
           status = excluded.status,
-          applied_date = excluded.applied_date,
+          status_date = excluded.status_date,
           url = excluded.url,
           location = excluded.location,
           location_type = excluded.location_type,
@@ -224,7 +228,7 @@ async function startServer() {
               company: item.company,
               position: item.position,
               status: item.status || 'Applied',
-              applied_date: item.applied_date || null,
+              status_date: item.status_date || null,
               url: item.url || null,
               location: item.location || null,
               location_type: item.location_type || 'OnSite',
@@ -379,13 +383,13 @@ async function startServer() {
     const now = Date.now();
 
     db.prepare(`
-      INSERT INTO applications (id, company, position, status, applied_date, url, location, location_type, salary, salary_min, salary_max, desired_salary_min, desired_salary_max, notes, pdf_data, version, is_deleted, dirty, updated_at)
+      INSERT INTO applications (id, company, position, status, status_date, url, location, location_type, salary, salary_min, salary_max, desired_salary_min, desired_salary_max, notes, pdf_data, version, is_deleted, dirty, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         company = excluded.company,
         position = excluded.position,
         status = excluded.status,
-        applied_date = excluded.applied_date,
+        status_date = excluded.status_date,
         url = excluded.url,
         location = excluded.location,
         location_type = excluded.location_type,
@@ -405,7 +409,7 @@ async function startServer() {
       app.company,
       app.position,
       app.status || 'Applied',
-      app.applied_date || null,
+      app.status_date || null,
       app.url || null,
       app.location || null,
       app.location_type || 'OnSite',
@@ -449,7 +453,7 @@ async function startServer() {
 
   app.post("/api/applications", (req, res) => {
     const {
-      id, company, position, status, applied_date, url, location, location_type,
+      id, company, position, status, status_date, url, location, location_type,
       salary, salary_min, salary_max, desired_salary_min, desired_salary_max,
       notes, pdf_data
     } = req.body;
@@ -459,13 +463,13 @@ async function startServer() {
 
     db.prepare(`
       INSERT INTO applications (
-        id, company, position, status, applied_date, url, location, location_type, 
+        id, company, position, status, status_date, url, location, location_type, 
         salary, salary_min, salary_max, desired_salary_min, desired_salary_max, 
         notes, pdf_data, version, updated_at
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      appId, company, position, status || 'Applied', applied_date, url, location, location_type || 'OnSite',
+      appId, company, position, status || 'Applied', status_date, url, location, location_type || 'OnSite',
       salary, salary_min || null, salary_max || null, desired_salary_min || null, desired_salary_max || null,
       notes, pdf_data, version, now
     );
@@ -477,7 +481,7 @@ async function startServer() {
   app.put("/api/applications/:id", (req, res) => {
     const { id } = req.params;
     const {
-      company, position, status, applied_date, url, location, location_type,
+      company, position, status, status_date, url, location, location_type,
       salary, salary_min, salary_max, desired_salary_min, desired_salary_max,
       notes, pdf_data
     } = req.body;
@@ -486,12 +490,12 @@ async function startServer() {
 
     db.prepare(`
       UPDATE applications 
-      SET company = ?, position = ?, status = ?, applied_date = ?, url = ?, location = ?, location_type = ?, 
+      SET company = ?, position = ?, status = ?, status_date = ?, url = ?, location = ?, location_type = ?, 
           salary = ?, salary_min = ?, salary_max = ?, desired_salary_min = ?, desired_salary_max = ?, 
           notes = ?, pdf_data = ?, version = ?, updated_at = ?
       WHERE id = ?
     `).run(
-      company, position, status, applied_date, url, location, location_type || 'OnSite',
+      company, position, status, status_date, url, location, location_type || 'OnSite',
       salary, salary_min || null, salary_max || null, desired_salary_min || null, desired_salary_max || null,
       notes, pdf_data, version, now, id
     );

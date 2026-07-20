@@ -9,3 +9,4 @@ coverage/
 *.db
 *.db.bak
 *.db.*.bak
+*.db.bak2

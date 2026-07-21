@@ -65,7 +65,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
       }
 
       const blob = await response.blob();
-      
+
       if (blob.size > 5 * 1024 * 1024) {
         alert('Generated PDF size is greater than 5MB.');
         return;
@@ -115,7 +115,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="max-w-3xl mx-auto"
@@ -130,7 +130,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
               {editingApp ? 'Update the details of your job application.' : 'Tell us about the role you\'re pursuing.'}
             </p>
           </div>
-          <button 
+          <button
             onClick={onCancel}
             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all"
             id="close-form-btn"
@@ -143,31 +143,31 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700 block ml-1">Company Name *</label>
-              <input 
+              <input
                 required
-                type="text" 
+                type="text"
                 value={formData.company ?? ''}
-                onChange={e => setFormData({...formData, company: e.target.value})}
+                onChange={e => setFormData({ ...formData, company: e.target.value })}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400"
                 placeholder="e.g. Google"
               />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700 block ml-1">Position *</label>
-              <input 
+              <input
                 required
-                type="text" 
+                type="text"
                 value={formData.position ?? ''}
-                onChange={e => setFormData({...formData, position: e.target.value})}
+                onChange={e => setFormData({ ...formData, position: e.target.value })}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400"
                 placeholder="e.g. Senior Frontend Engineer"
               />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700 block ml-1">Status</label>
-              <select 
+              <select
                 value={formData.status ?? ''}
-                onChange={e => setFormData({...formData, status: e.target.value as ApplicationStatus})}
+                onChange={e => setFormData({ ...formData, status: e.target.value as ApplicationStatus })}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
               >
                 <option value="Wishlist">Wishlist</option>
@@ -180,28 +180,29 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700 block ml-1">Status Date</label>
-              <input 
-                type="date" 
+              <input
+                required
+                type="date"
                 value={formData.status_date ?? ''}
-                onChange={e => setFormData({...formData, status_date: e.target.value})}
+                onChange={e => setFormData({ ...formData, status_date: e.target.value })}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
               />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700 block ml-1">Location</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={formData.location ?? ''}
-                onChange={e => setFormData({...formData, location: e.target.value})}
+                onChange={e => setFormData({ ...formData, location: e.target.value })}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400"
                 placeholder="e.g. New York, NY or Remote"
               />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700 block ml-1">Work Location Type</label>
-              <select 
+              <select
                 value={formData.location_type ?? ''}
-                onChange={e => setFormData({...formData, location_type: e.target.value as any})}
+                onChange={e => setFormData({ ...formData, location_type: e.target.value as any })}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
               >
                 <option value="OnSite">OnSite</option>
@@ -215,17 +216,17 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
             <div className="space-y-4">
               <label className="text-sm font-semibold text-slate-700 block ml-1">Job Listing Salary Range</label>
               <div className="grid grid-cols-2 gap-4">
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   value={formData.salary_min ?? ''}
-                  onChange={e => setFormData({...formData, salary_min: e.target.value ? Number(e.target.value) : undefined})}
+                  onChange={e => setFormData({ ...formData, salary_min: e.target.value ? Number(e.target.value) : undefined })}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400"
                   placeholder="Min ($)"
                 />
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   value={formData.salary_max ?? ''}
-                  onChange={e => setFormData({...formData, salary_max: e.target.value ? Number(e.target.value) : undefined})}
+                  onChange={e => setFormData({ ...formData, salary_max: e.target.value ? Number(e.target.value) : undefined })}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400"
                   placeholder="Max ($)"
                 />
@@ -234,17 +235,17 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
             <div className="space-y-4">
               <label className="text-sm font-semibold text-slate-700 block ml-1">Your Desired Salary Range</label>
               <div className="grid grid-cols-2 gap-4">
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   value={formData.desired_salary_min ?? ''}
-                  onChange={e => setFormData({...formData, desired_salary_min: e.target.value ? Number(e.target.value) : undefined})}
+                  onChange={e => setFormData({ ...formData, desired_salary_min: e.target.value ? Number(e.target.value) : undefined })}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400"
                   placeholder="Min ($)"
                 />
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   value={formData.desired_salary_max ?? ''}
-                  onChange={e => setFormData({...formData, desired_salary_max: e.target.value ? Number(e.target.value) : undefined})}
+                  onChange={e => setFormData({ ...formData, desired_salary_max: e.target.value ? Number(e.target.value) : undefined })}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400"
                   placeholder="Max ($)"
                 />
@@ -254,10 +255,10 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
 
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-700 block ml-1">Job URL</label>
-            <input 
-              type="url" 
+            <input
+              type="url"
               value={formData.url ?? ''}
-              onChange={e => setFormData({...formData, url: e.target.value})}
+              onChange={e => setFormData({ ...formData, url: e.target.value })}
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400"
               placeholder="https://company.com/careers/job-123"
             />
@@ -271,8 +272,8 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
                 <span className="text-sm font-medium text-slate-600 group-hover:text-slate-800">
                   {formData.pdf_data ? 'Replace PDF' : 'Upload job description PDF'}
                 </span>
-                <input 
-                  type="file" 
+                <input
+                  type="file"
                   ref={fileInputRef}
                   accept=".pdf"
                   onChange={handleFileChange}
@@ -283,11 +284,10 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
                 type="button"
                 onClick={handleFetchPdf}
                 disabled={!isValidUrl(formData.url || '') || isFetchingPdf}
-                className={`flex items-center justify-center gap-2 px-6 py-3 border rounded-2xl font-semibold transition-all ${
-                  isValidUrl(formData.url || '') && !isFetchingPdf
+                className={`flex items-center justify-center gap-2 px-6 py-3 border rounded-2xl font-semibold transition-all ${isValidUrl(formData.url || '') && !isFetchingPdf
                     ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 cursor-pointer shadow-sm active:scale-95'
                     : 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
-                }`}
+                  }`}
               >
                 <Globe className="w-5 h-5" />
                 <span>{isFetchingPdf ? 'Fetching PDF...' : 'Fetch job PDF'}</span>
@@ -296,7 +296,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
                 <div className="flex items-center gap-3 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100 flex-1">
                   <CheckCircle2 className="w-5 h-5 shrink-0" />
                   <span className="text-sm font-medium truncate">PDF Attached Successfully</span>
-                  <button 
+                  <button
                     type="button"
                     onClick={() => {
                       setFormData({ ...formData, pdf_data: '' });
@@ -316,10 +316,10 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
 
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-700 block ml-1">Notes</label>
-            <textarea 
+            <textarea
               rows={4}
               value={formData.notes ?? ''}
-              onChange={e => setFormData({...formData, notes: e.target.value})}
+              onChange={e => setFormData({ ...formData, notes: e.target.value })}
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all resize-none placeholder:text-slate-400"
               placeholder="Add details about role, skills, process, etc."
             />
@@ -332,7 +332,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
                   <h3 className="text-xl font-bold text-slate-900">Interviews</h3>
                   <p className="text-sm text-slate-500">Track your interview stages and feedback.</p>
                 </div>
-                <button 
+                <button
                   type="button"
                   onClick={() => onAddInterview(editingApp.id)}
                   className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl font-bold transition-all"
@@ -378,14 +378,14 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                          <button 
+                          <button
                             type="button"
                             onClick={() => onEditInterview(interview)}
                             className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all"
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
-                          <button 
+                          <button
                             type="button"
                             onClick={() => onDeleteInterview(interview.id)}
                             className="p-2 text-slate-400 hover:text-rose-600 hover:bg-white rounded-lg transition-all"
@@ -407,14 +407,14 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
           )}
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-slate-100">
-            <button 
+            <button
               type="button"
               onClick={onCancel}
               className="px-8 py-3 text-slate-600 font-bold hover:bg-slate-100 rounded-2xl transition-all"
             >
               Cancel
             </button>
-            <button 
+            <button
               type="submit"
               className="px-10 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-200 transition-all active:scale-95"
             >

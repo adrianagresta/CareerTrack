@@ -440,6 +440,18 @@ async function startServer() {
     res.json({ ...app, interviews });
   });
 
+  app.get("/api/applications/snapshot", (_req, res) => {
+    const metaRow = db.prepare("SELECT value FROM sync_meta WHERE key = 'table_version'").get() as { value: number } | undefined;
+    const applications = db.prepare("SELECT * FROM applications WHERE is_deleted = 0").all();
+    const interviews = db.prepare("SELECT * FROM interviews").all();
+
+    res.json({
+      server_version: metaRow?.value ?? 0,
+      applications,
+      interviews,
+    });
+  });
+
   // Legacy API Routes
   app.get("/api/applications", (req, res) => {
     const apps = db.prepare("SELECT * FROM applications WHERE is_deleted = 0 ORDER BY created_at DESC").all() as any[];

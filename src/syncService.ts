@@ -1,5 +1,5 @@
-import { getSyncMeta, setSyncMeta, applyServerChanges, initDB, getDirtyApplications, clearDirty } from './db';
-import { JobApplication, SyncRequest, SyncResponse } from './types';
+import { getSyncMeta, setSyncMeta, applyServerChanges, initDB, getDirtyApplications, clearDirty, replaceAllData } from './db';
+import { JobApplication, Interview, SyncRequest, SyncResponse } from './types';
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'error' | 'success';
 
@@ -178,6 +178,51 @@ export async function pushAllApplications() {
       status,
     };
     console.error('Push All error:', error);
+  } finally {
+    notify();
+  }
+}
+
+export async function pullAllApplications() {
+  syncState = { ...syncState, status: 'syncing' };
+  notify();
+
+  try {
+    const response = await fetch('/api/applications/snapshot');
+    if (!response.ok) throw new Error('Pull All failed');
+
+    const snapshot: {
+      server_version: number;
+      applications: JobApplication[];
+      interviews: Interview[];
+    } = await response.json();
+    if (!Number.isInteger(snapshot.server_version) ||
+      !Array.isArray(snapshot.applications) ||
+      !Array.isArray(snapshot.interviews)) {
+      throw new Error('Invalid server snapshot');
+    }
+
+    await replaceAllData(snapshot.applications, snapshot.interviews, snapshot.server_version);
+    syncState = {
+      status: 'success',
+      lastSyncTime: Date.now(),
+      failedAttempts: 0,
+    };
+
+    setTimeout(() => {
+      if (syncState.status === 'success') {
+        syncState = { ...syncState, status: 'idle' };
+        notify();
+      }
+    }, 3000);
+  } catch (error) {
+    const failedAttempts = syncState.failedAttempts + 1;
+    syncState = {
+      ...syncState,
+      failedAttempts,
+      status: failedAttempts >= MAX_ATTEMPTS ? 'offline' : 'error',
+    };
+    console.error('Pull All error:', error);
   } finally {
     notify();
   }

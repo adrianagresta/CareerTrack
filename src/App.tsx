@@ -13,12 +13,15 @@ import * as db from './db';
 import * as sync from './syncService';
 
 import { MainView } from './components/MainView';
+import { TableView } from './components/TableView';
 import { ApplicationForm } from './components/ApplicationForm';
 import { InterviewForm } from './components/InterviewForm';
 
 export default function App() {
-  const [view, setView] = useState<'main' | 'form' | 'interview'>('main');
+  const [view, setView] = useState<'main' | 'table' | 'form' | 'interview'>('main');
   const [applications, setApplications] = useState<JobApplication[]>([]);
+  const [selectedApplicationIds, setSelectedApplicationIds] = useState<Set<string>>(new Set());
+  const [bulkUpdateError, setBulkUpdateError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingApp, setEditingApp] = useState<JobApplication | null>(null);
@@ -28,6 +31,7 @@ export default function App() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteInterviewId, setDeleteInterviewId] = useState<string | null>(null);
   const [showPushAllConfirm, setShowPushAllConfirm] = useState(false);
+  const [showPullAllConfirm, setShowPullAllConfirm] = useState(false);
   const [syncState, setSyncState] = useState<sync.SyncState>({
     status: 'idle',
     lastSyncTime: null,
@@ -178,6 +182,32 @@ export default function App() {
     }
   };
 
+  const handleWithdrawSelected = async () => {
+    const selectedApplications = applications.filter(app => selectedApplicationIds.has(app.id));
+    if (selectedApplications.length === 0) return;
+
+    setBulkUpdateError(null);
+    try {
+      const statusDate = new Date().toISOString().split('T')[0];
+      const results = await Promise.allSettled(selectedApplications.map(app =>
+        db.saveApplication({ ...app, status: 'Withdrawn', status_date: statusDate })
+      ));
+      await fetchApplications();
+      sync.performSync();
+      const failures = results.filter(result => result.status === 'rejected');
+      if (failures.length > 0) {
+        console.error('Failed to withdraw selected applications:', failures);
+        setBulkUpdateError('Could not update all selected applications. Refresh and try again.');
+      } else {
+        setSelectedApplicationIds(new Set());
+      }
+    } catch (error) {
+      console.error('Failed to withdraw selected applications:', error);
+      setBulkUpdateError('Could not update all selected applications. Refresh and try again.');
+      await fetchApplications();
+    }
+  };
+
   const handleDeleteInterview = async (id: string) => {
     try {
       await db.deleteInterview(id);
@@ -284,15 +314,25 @@ export default function App() {
               <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100 group-hover:rotate-3 transition-transform">
                 <Briefcase className="text-white w-6 h-6" />
               </div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">CareerTrack</h1>
+              <div className="flex flex-col items-start">
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">CareerTrack</h1>
+                {view === 'main' && (
+                  <span className="text-xs font-bold text-slate-500">
+                    {stats.total - stats.closed} OPPORTUNITIES
+                  </span>
+                )}
+              </div>
             </button>
-            <div className="flex items-center gap-4">
-              {view === 'main' && (
-                <span className="hidden sm:inline-flex items-center px-3 py-1 bg-slate-100 rounded-lg text-xs font-bold text-slate-500">
-                  {stats.total - stats.closed} OPPORTUNITIES
-                </span>
-              )}
-            </div>
+            <label className="sr-only" htmlFor="view-navigation">Navigate to view</label>
+            <select
+              id="view-navigation"
+              value={view === 'table' ? 'table' : 'main'}
+              onChange={event => setView(event.target.value === 'table' ? 'table' : 'main')}
+              className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500"
+            >
+              <option value="main">Main View</option>
+              <option value="table">Table View</option>
+            </select>
           </div>
         </div>
       </header>
@@ -319,6 +359,23 @@ export default function App() {
                 onDelete={setDeleteConfirmId}
                 onAdd={() => { setEditingApp(null); resetForm(); setView('form'); }}
                 viewPdf={viewPdf}
+              />
+            </motion.div>
+          ) : view === 'table' ? (
+            <motion.div
+              key="table"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <TableView
+                apps={applications}
+                loading={loading}
+                selectedIds={selectedApplicationIds}
+                onSelectionChange={setSelectedApplicationIds}
+                onWithdrawSelected={handleWithdrawSelected}
+                updateError={bulkUpdateError}
               />
             </motion.div>
           ) : view === 'form' ? (
@@ -411,6 +468,54 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Pull All Confirmation Overlay */}
+      <AnimatePresence>
+        {showPullAllConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowPullAllConfirm(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden p-10"
+            >
+              <div className="text-center">
+                <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <RefreshCw className="text-indigo-600 w-10 h-10" />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-900 mb-3">Pull All Applications?</h3>
+                <p className="text-slate-500 mb-10 text-lg">
+                  This will replace all client data with the applications and interviews on the server. Unsynced local changes will be lost.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={() => setShowPullAllConfirm(false)}
+                    className="flex-1 px-8 py-4 text-slate-600 font-bold hover:bg-slate-50 rounded-2xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowPullAllConfirm(false);
+                      sync.pullAllApplications();
+                    }}
+                    className="flex-1 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-xl shadow-indigo-200 transition-all active:scale-95"
+                  >
+                    Yes, Pull All
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Delete Confirmation Overlay */}
       <AnimatePresence>
         {(deleteConfirmId || deleteInterviewId) && (
@@ -467,6 +572,8 @@ export default function App() {
             <button
               onClick={() => sync.manualSync()}
               disabled={syncState.status === 'syncing'}
+              title="Send local changes to the server and apply server updates."
+              aria-label="Sync Data: Send local changes to the server and apply server updates."
               className={`flex items-center gap-2 group ${syncState.status === 'syncing' ? 'text-indigo-600' : 'hover:text-indigo-600'
                 } transition-colors`}
             >
@@ -476,10 +583,22 @@ export default function App() {
             <button
               onClick={() => setShowPushAllConfirm(true)}
               disabled={syncState.status === 'syncing'}
+              title="Push all active local applications to the server."
+              aria-label="Push All: Push all active local applications to the server."
               className={`flex items-center gap-2 group ${syncState.status === 'syncing' ? 'text-slate-300' : 'hover:text-indigo-600'
                 } transition-colors border-l border-slate-200 pl-6`}
             >
               <span>Push All</span>
+            </button>
+            <button
+              onClick={() => setShowPullAllConfirm(true)}
+              disabled={syncState.status === 'syncing'}
+              title="Replace local applications and interviews with server data. Unsynced local changes will be lost."
+              aria-label="Pull All: Replace local applications and interviews with server data. Unsynced local changes will be lost."
+              className={`flex items-center gap-2 group ${syncState.status === 'syncing' ? 'text-slate-300' : 'hover:text-indigo-600'
+                } transition-colors border-l border-slate-200 pl-6`}
+            >
+              <span>Pull All</span>
             </button>
             {syncState.lastSyncTime && (
               <span className="hidden sm:inline border-l border-slate-200 pl-6">

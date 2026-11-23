@@ -96,6 +96,27 @@ export async function getApplications(): Promise<JobApplication[]> {
   })).sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
 }
 
+export async function replaceAllData(applications: JobApplication[], interviews: Interview[], serverVersion: number) {
+  const db = await getDB();
+  const tx = db.transaction(['applications', 'interviews', 'sync_meta'], 'readwrite');
+  const applicationStore = tx.objectStore('applications');
+  const interviewStore = tx.objectStore('interviews');
+
+  await Promise.all([
+    applicationStore.clear(),
+    interviewStore.clear(),
+  ]);
+  for (const app of applications) {
+    const { interviews: _interviews, ...application } = app;
+    await applicationStore.put({ ...application, dirty: 0 });
+  }
+  for (const interview of interviews) {
+    await interviewStore.put(interview);
+  }
+  await tx.objectStore('sync_meta').put({ key: 'last_sync_version', value: serverVersion });
+  await tx.done;
+}
+
 export async function getApplication(id: string): Promise<JobApplication | undefined> {
   const db = await getDB();
   return db.get('applications', id);

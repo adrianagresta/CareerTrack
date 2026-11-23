@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Plus,
   Search,
@@ -58,7 +58,13 @@ export const MainView: React.FC<MainViewProps> = ({
   onAdd,
   viewPdf
 }) => {
-  console.log(apps);
+  const [showAll, setShowAll] = useState(false);
+  const visibleApps = showAll ? apps : apps.slice(0, 20);
+
+  useEffect(() => {
+    setShowAll(false);
+  }, [searchQuery, activeFilter, apps.length]);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20">
       {/* Welcome & Actions */}
@@ -127,8 +133,9 @@ export const MainView: React.FC<MainViewProps> = ({
             )}
           </div>
         ) : (
-          <AnimatePresence mode="popLayout">
-            {apps.map((app) => {
+          <>
+            <AnimatePresence mode="popLayout">
+            {visibleApps.map((app) => {
               let appRangeString = "";
               let buildMin = (new Boolean(app.salary_min)).valueOf();
               let buildMax = (new Boolean(app.salary_max)).valueOf();
@@ -246,7 +253,18 @@ export const MainView: React.FC<MainViewProps> = ({
               </motion.div>
               );
             })}
-          </AnimatePresence>
+            </AnimatePresence>
+            {!showAll && apps.length > 20 && (
+              <button
+                type="button"
+                onClick={() => setShowAll(true)}
+                className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 hover:border-indigo-200 hover:text-indigo-600 text-slate-600 px-6 py-4 rounded-2xl transition-all font-bold"
+                id="load-all-apps-btn"
+              >
+                Load all remaining items
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -202,7 +202,7 @@ export default function App() {
       company: app.company,
       position: app.position,
       status: app.status,
-      status_date: app.status_date,
+      status_date: app.status_date ?? '',
       url: app.url,
       location: app.location,
       location_type: app.location_type || 'OnSite',
@@ -252,7 +252,7 @@ export default function App() {
   });
 
   const displayedApps = activeFilter !== null
-    ? [...filteredApps].sort((a, b) => b.status_date.localeCompare(a.status_date))
+    ? [...filteredApps].sort((a, b) => (b.status_date ?? '').localeCompare(a.status_date ?? ''))
     : filteredApps;
 
   const stats = {

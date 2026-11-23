@@ -29,7 +29,7 @@ export interface JobApplication {
   company: string;
   position: string;
   status: ApplicationStatus;
-  status_date: string;
+  status_date: string | null;
   url: string;
   location: string;
   location_type?: LocationType;

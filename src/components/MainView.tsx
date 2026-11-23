@@ -39,8 +39,8 @@ interface MainViewProps {
   viewPdf: (pdfData: string) => void;
 }
 
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '';
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return 'Date not set';
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 };

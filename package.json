@@ -36,5 +36,13 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
+  },
+  "allowScripts": {
+    "@google/genai@1.51.0": true,
+    "better-sqlite3@12.9.0": true,
+    "esbuild@0.28.1": true,
+    "esbuild@0.25.12": true,
+    "protobufjs@7.6.4": true,
+    "puppeteer@25.1.0": true
   }
 }
